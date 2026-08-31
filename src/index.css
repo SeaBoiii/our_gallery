@@ -1,0 +1,9 @@
+@import './styles/tokens.css';
+@import './styles/global.css';
+@import './styles/landing.css';
+@import './styles/gallery.css';
+@import './styles/lightbox.css';
+@import './styles/upload.css';
+@import './styles/qr.css';
+@import './styles/live.css';
+@import './styles/admin.css';

@@ -1,0 +1,62 @@
+name = "aleem-nurul-gallery-api"
+main = "src/index.ts"
+compatibility_date = "2026-08-30"
+compatibility_flags = ["nodejs_compat"]
+routes = [{ pattern = "gallery-api.aleemxnurul.love", custom_domain = true }]
+
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[[d1_databases]]
+binding = "DB"
+database_name = "aleem-nurul-gallery-db"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "aleem-nurul-gallery"
+
+[vars]
+ENVIRONMENT = "production"
+R2_ACCOUNT_ID = "REPLACE_WITH_CLOUDFLARE_ACCOUNT_ID"
+R2_BUCKET_NAME = "aleem-nurul-gallery"
+ALLOWED_ORIGIN = "https://gallery.aleemxnurul.love"
+TURNSTILE_EXPECTED_HOSTNAME = "gallery.aleemxnurul.love"
+TURNSTILE_BYPASS = "false"
+AUTO_APPROVE_UPLOADS = "false"
+UPLOAD_URL_TTL_SECONDS = "600"
+ADMIN_SESSION_TTL_SECONDS = "28800"
+SOFT_STORAGE_WARNING_GB = "450"
+HARD_STORAGE_LIMIT_GB = ""
+
+[triggers]
+crons = ["*/15 * * * *"]
+
+[env.development]
+name = "aleem-nurul-gallery-api-dev"
+routes = []
+
+[[env.development.d1_databases]]
+binding = "DB"
+database_name = "aleem-nurul-gallery-db-dev"
+database_id = "local-gallery-db"
+migrations_dir = "migrations"
+
+[[env.development.r2_buckets]]
+binding = "MEDIA"
+bucket_name = "aleem-nurul-gallery-dev"
+
+[env.development.vars]
+ENVIRONMENT = "development"
+R2_ACCOUNT_ID = "local"
+R2_BUCKET_NAME = "aleem-nurul-gallery-dev"
+ALLOWED_ORIGIN = "http://localhost:5173,http://127.0.0.1:5173"
+TURNSTILE_EXPECTED_HOSTNAME = "localhost"
+TURNSTILE_BYPASS = "true"
+AUTO_APPROVE_UPLOADS = "false"
+UPLOAD_URL_TTL_SECONDS = "600"
+ADMIN_SESSION_TTL_SECONDS = "28800"
+SOFT_STORAGE_WARNING_GB = "450"
+HARD_STORAGE_LIMIT_GB = ""

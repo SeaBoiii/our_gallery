@@ -1,0 +1,44 @@
+{
+  "name": "aleem-nurul-flight-memories",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:worker": "wrangler dev --config worker/wrangler.toml --env development --persist-to .wrangler/state",
+    "build": "tsc -b && npm run typecheck:worker && vite build",
+    "build:worker": "wrangler deploy --dry-run --config worker/wrangler.toml --outdir dist-worker --env \"\"",
+    "typecheck:worker": "tsc -p worker/tsconfig.json",
+    "lint": "oxlint src worker shared vite.config.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "preview": "vite preview",
+    "db:migrate:local": "wrangler d1 migrations apply aleem-nurul-gallery-db-dev --local --env development --config worker/wrangler.toml --persist-to .wrangler/state",
+    "db:seed:local": "wrangler d1 execute aleem-nurul-gallery-db-dev --local --env development --config worker/wrangler.toml --file worker/seeds/development.sql --persist-to .wrangler/state"
+  },
+  "dependencies": {
+    "aws4fetch": "^1.0.20",
+    "heic2any": "^0.0.4",
+    "lucide-react": "^1.37.0",
+    "qrcode.react": "^4.2.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^7.18.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260830.1",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.6",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.1.0",
+    "jsdom": "^30.0.1",
+    "oxlint": "^1.79.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.127.1"
+  }
+}
