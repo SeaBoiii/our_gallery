@@ -18,7 +18,7 @@ export function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
   return (
     <main className="admin-login-page">
       <form className="admin-login-card" onSubmit={submit}>
-        <WeddingMonogram />
+        <WeddingMonogram label="Aleem and Nurul" />
         <p className="eyebrow">Crew access only</p>
         <h1>Gallery control.</h1>
         <p>Sign in to review memories, manage uploads, and control the live wall.</p>

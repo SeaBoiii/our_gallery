@@ -7,6 +7,8 @@
 .qr-card::before { top: -115px; left: -95px; }
 .qr-card::after { right: -100px; bottom: -120px; }
 .qr-card-brand { position: relative; z-index: 1; display: flex; align-items: center; gap: 12px; }
+.qr-card-brand .monogram { width: 112px; }
+.qr-card-brand .monogram--compact { width: 72px; }
 .qr-card-brand > span { display: grid; gap: 3px; text-align: left; }
 .qr-card-brand strong { font-family: var(--serif); font-size: 1.05rem; font-weight: 400; }
 .qr-card-brand small { color: var(--muted); font-size: .48rem; font-weight: 850; letter-spacing: .15em; text-transform: uppercase; }

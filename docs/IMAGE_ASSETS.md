@@ -1,4 +1,13 @@
-# Generated image assets
+# Image assets
+
+## Aleem & Nurul monogram
+
+- `public/monogram-original.png` is the exact transparent 768 × 512 PNG supplied by the user.
+- `public/monogram.png` is the display-ready 599 × 381 crop used throughout the interface. It was copied from the user-owned `our_flight` visual reference without modifying that sibling project.
+- `public/favicon.png` is the square ivory favicon treatment of the same mark.
+- The monogram is presented as supplied: intertwined deep-teal A/N letterforms with the gold ampersand and flourish. No generated reinterpretation is used in the site.
+
+## Generated gallery artwork
 
 The project uses one original image generated with OpenAI's built-in image-generation mode. It was visually inspected at 1536 × 1024 before being copied and cropped into the repository.
 

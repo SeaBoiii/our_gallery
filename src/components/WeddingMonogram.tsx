@@ -1,9 +1,18 @@
-export function WeddingMonogram({ compact = false }: { compact?: boolean }) {
+type WeddingMonogramProps = {
+  compact?: boolean
+  label?: string
+}
+
+export function WeddingMonogram({ compact = false, label }: WeddingMonogramProps) {
   return (
-    <span className={`monogram${compact ? ' monogram--compact' : ''}`} aria-label="Aleem and Nurul">
-      <span>A</span>
-      <i aria-hidden="true" />
-      <span>N</span>
-    </span>
+    <img
+      className={`monogram${compact ? ' monogram--compact' : ''}`}
+      src="/monogram.png"
+      width="599"
+      height="381"
+      alt={label || ''}
+      decoding="async"
+      draggable={false}
+    />
   )
 }

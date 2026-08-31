@@ -1,9 +1,13 @@
-[
-  {
-    "AllowedOrigins": ["http://localhost:5173", "http://127.0.0.1:5173"],
-    "AllowedMethods": ["GET", "HEAD", "PUT"],
-    "AllowedHeaders": ["Content-Type", "If-None-Match"],
-    "ExposeHeaders": ["ETag"],
-    "MaxAgeSeconds": 3600
-  }
-]
+{
+  "rules": [
+    {
+      "allowed": {
+        "origins": ["http://localhost:5173", "http://127.0.0.1:5173"],
+        "methods": ["GET", "HEAD", "PUT"],
+        "headers": ["Content-Type", "If-None-Match"]
+      },
+      "exposeHeaders": ["ETag"],
+      "maxAgeSeconds": 3600
+    }
+  ]
+}

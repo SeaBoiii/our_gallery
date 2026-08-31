@@ -5,6 +5,7 @@ import { HomePage } from './pages/HomePage'
 import { useLocale } from './context/useLocale'
 import { copy } from './i18n/copy'
 import { RouteErrorBoundary } from './components/RouteErrorBoundary'
+import { WeddingMonogram } from './components/WeddingMonogram'
 
 const LivePage = lazy(() => import('./pages/LivePage'))
 const QrPage = lazy(() => import('./pages/QrPage'))
@@ -12,7 +13,7 @@ const AdminPage = lazy(() => import('./pages/AdminPage'))
 
 function RouteLoading() {
   const { locale } = useLocale()
-  return <main className="route-loading" role="status"><span className="monogram monogram--compact"><span>A</span><i /><span>N</span></span><p>{copy[locale].preparing}</p></main>
+  return <main className="route-loading" role="status"><WeddingMonogram compact /><p>{copy[locale].preparing}</p></main>
 }
 
 function RoutedContent() {

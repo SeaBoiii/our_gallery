@@ -5,6 +5,7 @@ import { QRCodeCard } from '../components/QRCodeCard'
 import { getGallery, getLiveConfig } from '../services/api'
 import { useLocale } from '../context/useLocale'
 import { copy } from '../i18n/copy'
+import { WeddingMonogram } from '../components/WeddingMonogram'
 
 type Source = 'all' | EventSlug
 
@@ -151,7 +152,10 @@ export default function LivePage() {
     <main className={`live-wall live-layout-${layout}`}>
       <div className="live-clouds" aria-hidden="true" />
       <header className="live-header">
-        <div><p>Aleem <i>×</i> Nurul</p><span>{t.flightMemories} · AN-210827</span></div>
+        <div className="live-brand">
+          <div className="live-brand-mark"><WeddingMonogram compact label="Aleem and Nurul" /></div>
+          <span>{t.flightMemories} · AN-210827</span>
+        </div>
         <div className="live-controls">
           <div aria-label={t.source}>
             {([['all', t.all], ['solemnisation', t.dayOne], ['reception', t.dayTwo]] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={source === value} onClick={() => selectSource(value)}>{label}</button>)}

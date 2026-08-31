@@ -2,10 +2,10 @@
 .live-wall::before { position: absolute; z-index: -2; inset: 0; background: radial-gradient(circle at 70% 10%,rgba(107,155,171,.3),transparent 42%),linear-gradient(145deg,#173c44,#0a2429 70%); content: ''; }
 .live-clouds { position: absolute; z-index: -1; inset: 0; opacity: .08; background: url('/clouds-1280.webp') center/cover; mix-blend-mode: screen; animation: cloud-drift 30s ease-in-out infinite alternate; }
 .live-header { position: relative; z-index: 5; display: flex; min-height: 86px; align-items: center; justify-content: space-between; gap: 24px; padding: max(18px,env(safe-area-inset-top)) max(26px,env(safe-area-inset-right)) 12px max(26px,env(safe-area-inset-left)); }
-.live-header > div:first-child { display: grid; gap: 3px; }
-.live-header p { margin: 0; font-family: var(--serif); font-size: clamp(1.25rem,2vw,1.8rem); }
-.live-header p i { color: var(--metal); font-style: normal; }
-.live-header span { color: #adc5ca; font-size: .52rem; font-weight: 850; letter-spacing: .17em; text-transform: uppercase; }
+.live-brand { display: flex; align-items: center; gap: 13px; }
+.live-brand-mark { display: grid; min-width: 88px; min-height: 58px; place-items: center; padding: 6px 8px; border: 1px solid rgba(207,173,100,.42); border-radius: 13px; background: rgba(255,254,250,.96); box-shadow: 0 12px 34px rgba(0,0,0,.18); }
+.live-brand-mark .monogram { width: 72px; }
+.live-brand > span { color: #adc5ca; font-size: .52rem; font-weight: 850; letter-spacing: .17em; text-transform: uppercase; }
 .live-controls { display: flex; align-items: center; gap: 10px; }
 .live-controls > div { display: flex; padding: 4px; border: 1px solid rgba(255,255,255,.12); border-radius: 999px; background: rgba(255,255,255,.06); }
 .live-controls button { min-height: 40px; padding: 0 14px; border: 0; border-radius: 999px; color: #b9cdd1; background: transparent; font-size: .59rem; font-weight: 800; }
@@ -55,6 +55,7 @@
 }
 @media (max-width: 600px) {
   .live-header { align-items: flex-start; }
+  .live-brand > span { display: none; }
   .live-controls > div { display: none; }
   .live-memory { padding: 8px 12px calc(116px + env(safe-area-inset-bottom)); gap: 16px; }
   .live-media img,.live-media video { max-height: 42svh; }

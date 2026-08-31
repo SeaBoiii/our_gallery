@@ -11,7 +11,7 @@ head_sampling_rate = 1
 [[d1_databases]]
 binding = "DB"
 database_name = "aleem-nurul-gallery-db"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "e6c0bf2d-b38d-4e3f-bf05-ed94b9ac1950"
 migrations_dir = "migrations"
 
 [[r2_buckets]]
@@ -20,7 +20,7 @@ bucket_name = "aleem-nurul-gallery"
 
 [vars]
 ENVIRONMENT = "production"
-R2_ACCOUNT_ID = "REPLACE_WITH_CLOUDFLARE_ACCOUNT_ID"
+R2_ACCOUNT_ID = "84aaa07b9bf25ab903e603f8ef24c4d8"
 R2_BUCKET_NAME = "aleem-nurul-gallery"
 ALLOWED_ORIGIN = "https://gallery.aleemxnurul.love"
 TURNSTILE_EXPECTED_HOSTNAME = "gallery.aleemxnurul.love"
