@@ -10,6 +10,8 @@ export const copy = {
     dates: '21 — 22 August 2027',
     intro: 'Our photographers capture the ceremony. You capture everything in between.',
     addMemory: 'Add a Memory',
+    explore: 'Explore',
+    findMe: 'Find Me',
     takePhoto: 'Take a Photo',
     chooseMedia: 'Choose Photos / Videos',
     viewGallery: 'View Gallery',
@@ -31,7 +33,7 @@ export const copy = {
     switchLanguage: 'Tukar ke Bahasa Melayu',
     gallery: {
       filterAria: 'Filter memories', celebrationAria: 'Celebration', mediaAria: 'Media type', allMemories: 'All memories', dayOne: '21 Aug', dayTwo: '22 Aug', dateOne: '21 AUG 2027', dateTwo: '22 AUG 2027', solemnisation: 'Solemnisation', reception: "Groom's Reception", all: 'All', photos: 'Photos', videos: 'Videos',
-      open: 'Open', from: 'from', photo: 'photo', video: 'video', guestMemory: 'Guest memory', videoMemory: 'Video memory', preview: 'Preview', sharedBy: 'Shared by', dialog: 'Memory viewer', share: 'Share memory', close: 'Close memory', previous: 'Previous memory', next: 'Next memory',
+      open: 'Open', from: 'from', photo: 'photo', video: 'video', guestMemory: 'Guest memory', videoMemory: 'Video memory', preview: 'Preview', sharedBy: 'Shared by', dialog: 'Memory viewer', share: 'Share memory', close: 'Close memory', previous: 'Previous memory', next: 'Next memory', addFavourite: 'Add to favourites', removeFavourite: 'Remove from favourites', download: 'Download original', downloadFailed: 'This memory could not be downloaded. Please try again.',
       shareTitle: 'Aleem & Nurul — Flight Memories', shareFallback: 'A memory from Aleem and Nurul’s wedding.', copied: 'Link copied', shareFailed: 'The link could not be copied.', tryAgain: 'Try again', empty: 'No approved memories have arrived at this gate yet.', loading: 'Loading memories…', loadError: 'Memories could not be loaded.',
     },
     qr: {
@@ -63,6 +65,8 @@ export const copy = {
     dates: '21 — 22 Ogos 2027',
     intro: 'Jurugambar kami merakam upacara. Anda merakam segala detik di antaranya.',
     addMemory: 'Kongsi Kenangan',
+    explore: 'Terokai',
+    findMe: 'Cari Saya',
     takePhoto: 'Ambil Foto',
     chooseMedia: 'Pilih Foto / Video',
     viewGallery: 'Lihat Galeri',
@@ -84,7 +88,7 @@ export const copy = {
     switchLanguage: 'Switch to English',
     gallery: {
       filterAria: 'Tapis kenangan', celebrationAria: 'Majlis', mediaAria: 'Jenis media', allMemories: 'Semua kenangan', dayOne: '21 Ogos', dayTwo: '22 Ogos', dateOne: '21 OGOS 2027', dateTwo: '22 OGOS 2027', solemnisation: 'Akad Nikah', reception: 'Resepsi Pengantin Lelaki', all: 'Semua', photos: 'Foto', videos: 'Video',
-      open: 'Buka', from: 'daripada', photo: 'foto', video: 'video', guestMemory: 'Kenangan tetamu', videoMemory: 'Kenangan video', preview: 'Pratonton', sharedBy: 'Dikongsi oleh', dialog: 'Paparan kenangan', share: 'Kongsi kenangan', close: 'Tutup kenangan', previous: 'Kenangan sebelumnya', next: 'Kenangan seterusnya',
+      open: 'Buka', from: 'daripada', photo: 'foto', video: 'video', guestMemory: 'Kenangan tetamu', videoMemory: 'Kenangan video', preview: 'Pratonton', sharedBy: 'Dikongsi oleh', dialog: 'Paparan kenangan', share: 'Kongsi kenangan', close: 'Tutup kenangan', previous: 'Kenangan sebelumnya', next: 'Kenangan seterusnya', addFavourite: 'Tambah ke kegemaran', removeFavourite: 'Buang daripada kegemaran', download: 'Muat turun fail asal', downloadFailed: 'Kenangan ini tidak dapat dimuat turun. Sila cuba lagi.',
       shareTitle: 'Aleem & Nurul — Kenangan Penerbangan', shareFallback: 'Sebuah kenangan daripada perkahwinan Aleem dan Nurul.', copied: 'Pautan disalin', shareFailed: 'Pautan tidak dapat disalin.', tryAgain: 'Cuba lagi', empty: 'Belum ada kenangan diluluskan di pintu ini.', loading: 'Memuatkan kenangan…', loadError: 'Kenangan tidak dapat dimuatkan.',
     },
     qr: {

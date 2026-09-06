@@ -47,7 +47,7 @@ export function corsHeaders(request: Request, env: Env) {
     headers.set('Access-Control-Allow-Origin', origin)
     headers.set('Access-Control-Allow-Credentials', 'true')
     headers.set('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS')
-    headers.set('Access-Control-Allow-Headers', 'Content-Type,X-Gallery-Session')
+    headers.set('Access-Control-Allow-Headers', 'Content-Type,X-Gallery-Session,X-Find-Me-Consent')
     headers.set('Access-Control-Max-Age', '86400')
   }
   return headers
@@ -58,6 +58,7 @@ export function json<T>(request: Request, env: Env, data: T, status = 200, addit
   const headers = corsHeaders(request, env)
   headers.set('Content-Type', 'application/json; charset=utf-8')
   headers.set('X-Content-Type-Options', 'nosniff')
+  headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
   if (additional) new Headers(additional).forEach((value, key) => headers.set(key, value))
   return new Response(JSON.stringify(body), { status, headers })
 }

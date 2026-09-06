@@ -5,7 +5,11 @@
 .filter-group button[aria-pressed="true"] { color: #fff; background: var(--accent-deep); box-shadow: 0 6px 16px rgba(53,104,121,.18); }
 .filter-divider { width: 1px; height: 22px; background: var(--line); }
 .memory-grid { columns: 3 260px; column-gap: 14px; margin-top: 24px; }
-.memory-card { display: block; width: 100%; margin: 0 0 14px; break-inside: avoid; padding: 8px; border: 1px solid var(--line); border-radius: 17px; color: var(--ink); background: var(--paper); box-shadow: 0 12px 32px rgba(23,60,68,.08); text-align: left; transition: transform 180ms ease, box-shadow 180ms ease; }
+.memory-card { position: relative; display: block; width: 100%; margin: 0 0 14px; break-inside: avoid; padding: 8px; border: 1px solid var(--line); border-radius: 17px; color: var(--ink); background: var(--paper); box-shadow: 0 12px 32px rgba(23,60,68,.08); text-align: left; transition: transform 180ms ease, box-shadow 180ms ease; }
+.memory-open { display: block; width: 100%; padding: 0; border: 0; color: inherit; background: transparent; text-align: left; }
+.memory-favourite { position: absolute; z-index: 2; right: 16px; bottom: 14px; display: grid; width: 38px; height: 38px; place-items: center; border: 1px solid var(--line); border-radius: 50%; color: var(--accent-deep); background: rgba(255,254,250,.94); box-shadow: 0 5px 16px rgba(23,60,68,.12); }
+.memory-favourite svg { width: 17px; }
+.memory-favourite.is-favourite { color: #a4544f; }
 .memory-card:hover { transform: translateY(-3px); box-shadow: 0 18px 40px rgba(23,60,68,.13); }
 .memory-frame { position: relative; display: block; width: 100%; overflow: hidden; border-radius: 11px; background: var(--soft); }
 .memory-frame img { width: 100%; height: 100%; object-fit: cover; transition: transform 500ms ease; }
@@ -15,7 +19,7 @@
 .video-badge, .sample-badge { position: absolute; top: 10px; display: inline-flex; min-height: 28px; align-items: center; gap: 5px; padding: 0 9px; border-radius: 999px; color: #fff; background: rgba(23,60,68,.82); backdrop-filter: blur(8px); font-size: .52rem; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
 .video-badge { left: 10px; }
 .sample-badge { right: 10px; color: var(--ink); background: rgba(255,254,250,.86); }
-.memory-caption { display: grid; gap: 4px; padding: 11px 7px 5px; }
+.memory-caption { display: grid; gap: 4px; padding: 11px 48px 5px 7px; }
 .memory-caption > span { color: var(--accent-deep); font-size: .49rem; font-weight: 850; letter-spacing: .14em; text-transform: uppercase; }
 .memory-caption strong { overflow: hidden; font-family: var(--serif); font-size: .92rem; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
 .gallery-state { display: grid; justify-items: start; gap: 14px; margin-top: 26px; padding: 28px; border: 1px solid var(--line); border-radius: 18px; background: var(--paper); }

@@ -1,4 +1,5 @@
-import { ArrowDown, Camera, ImagePlus, Plane } from 'lucide-react'
+import { ArrowDown, Camera, ImagePlus, Plane, Search, ScanFace } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { useLocale } from '../context/useLocale'
 import { copy } from '../i18n/copy'
 import { WeddingMonogram } from './WeddingMonogram'
@@ -7,9 +8,10 @@ type HeroProps = {
   onAddMemory: () => void
   onTakePhoto: () => void
   onChooseMedia: () => void
+  uploadsEnabled?: boolean
 }
 
-export function Hero({ onAddMemory, onTakePhoto, onChooseMedia }: HeroProps) {
+export function Hero({ onAddMemory, onTakePhoto, onChooseMedia, uploadsEnabled = true }: HeroProps) {
   const { locale } = useLocale()
   const t = copy[locale]
   return (
@@ -23,13 +25,13 @@ export function Hero({ onAddMemory, onTakePhoto, onChooseMedia }: HeroProps) {
         <p className="hero-intro">{t.intro}</p>
 
         <div className="hero-actions">
-          <button type="button" className="button button-primary" onClick={onAddMemory}>
+          {uploadsEnabled ? <button type="button" className="button button-primary" onClick={onAddMemory}>
             <ImagePlus aria-hidden="true" size={18} /> {t.addMemory}
-          </button>
-          <div className="quick-actions" aria-label={t.quickActions}>
+          </button> : <Link className="button button-primary" to="/explore"><Search aria-hidden="true" size={18} />{t.explore}</Link>}
+          {uploadsEnabled ? <div className="quick-actions" aria-label={t.quickActions}>
             <button type="button" onClick={onTakePhoto}><Camera aria-hidden="true" size={17} />{t.takePhoto}</button>
             <button type="button" onClick={onChooseMedia}><ImagePlus aria-hidden="true" size={17} />{t.chooseMedia}</button>
-          </div>
+          </div> : <div className="quick-actions"><Link to="/find-me"><ScanFace aria-hidden="true" size={17} />{t.findMe}</Link></div>}
         </div>
 
         <dl className="flight-meta">

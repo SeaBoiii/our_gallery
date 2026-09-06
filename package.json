@@ -14,22 +14,29 @@
     "test:watch": "vitest",
     "preview": "vite preview",
     "db:migrate:local": "wrangler d1 migrations apply aleem-nurul-gallery-db-dev --local --env development --config worker/wrangler.toml --persist-to .wrangler/state",
-    "db:seed:local": "wrangler d1 execute aleem-nurul-gallery-db-dev --local --env development --config worker/wrangler.toml --file worker/seeds/development.sql --persist-to .wrangler/state"
+    "db:seed:local": "wrangler d1 execute aleem-nurul-gallery-db-dev --local --env development --config worker/wrangler.toml --file worker/seeds/development.sql --persist-to .wrangler/state",
+    "archive:build": "node tools/archive-builder/index.mjs",
+    "ai:purge-faces": "node tools/ai/purge-faces.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1123.0",
+    "@aws-sdk/lib-storage": "^3.1123.0",
+    "archiver": "^8.0.0",
     "aws4fetch": "^1.0.20",
     "heic2any": "^0.0.4",
     "lucide-react": "^1.37.0",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-router-dom": "^7.18.3"
+    "react-router-dom": "^7.18.3",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260830.1",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.6",
+    "@types/archiver": "^8.0.0",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",

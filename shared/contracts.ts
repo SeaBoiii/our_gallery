@@ -3,6 +3,10 @@ export type EventSlug = 'solemnisation' | 'reception'
 export type MediaType = 'photo' | 'video'
 export type MediaStatus = 'uploading' | 'reconciling' | 'pending' | 'approved' | 'rejected' | 'deleting' | 'deleted' | 'expired'
 export type DerivativeStatus = 'pending' | 'ready' | 'partial' | 'unavailable' | 'not_required'
+export type EventMode = 'live' | 'post-wedding' | 'archive'
+export type AiTaskStatus = 'not_requested' | 'queued' | 'processing' | 'complete' | 'partial' | 'failed' | 'disabled'
+export type AiJobStatus = 'queued' | 'dispatched' | 'processing' | 'complete' | 'partial' | 'failed' | 'dismissed' | 'cancelled'
+export type ArchiveJobStatus = 'draft' | 'inventory' | 'building' | 'partial' | 'complete' | 'failed' | 'cancelled'
 
 export type ApiError = {
   code: string
@@ -34,6 +38,12 @@ export type GalleryMedia = {
   durationSeconds: number | null
   guestName: string | null
   guestMessage: string | null
+  altText?: string
+  aiCaption?: string | null
+  categories?: GalleryCategory[]
+  source?: 'guest' | 'photographer'
+  similarity?: number
+  matchStrength?: 'strong' | 'possible'
   createdAt: string
 }
 
@@ -145,6 +155,9 @@ export type AdminMedia = {
   createdAt: string
   thumbnailUrl: string | null
   originalDownloadUrl: string | null
+  faceSearchEnabled?: boolean
+  ai?: MediaAiSummary | null
+  categories?: GalleryCategory[]
 }
 
 export type AdminMediaPage = { items: AdminMedia[]; nextCursor: string | null }
@@ -153,5 +166,172 @@ export type GallerySettings = {
   uploadsEnabled: boolean
   autoApproveUploads: boolean
   liveWallSource: 'all' | EventSlug
+  eventMode: EventMode
+  aiEnabled: boolean
+  faceSearchEnabled: boolean
+  autoAiProcessing: boolean
+  semanticSearchEnabled: boolean
+  aiProcessingPaused: boolean
   events: GalleryEvent[]
+}
+
+export type PublicCapabilities = {
+  eventMode: EventMode
+  uploadsEnabled: boolean
+  liveWallEnabled: boolean
+  galleryEnabled: true
+  findMeEnabled: boolean
+  semanticSearchEnabled: boolean
+  categoryExploreEnabled: boolean
+  archiveAvailable: boolean
+}
+
+export type GalleryCategory = {
+  id: string
+  slug: string
+  displayName: string
+  confidence?: number | null
+  source?: 'ai' | 'admin'
+}
+
+export type MediaAiSummary = {
+  overallStatus: AiTaskStatus
+  categorisationStatus: AiTaskStatus
+  captionStatus: AiTaskStatus
+  faceIndexStatus: AiTaskStatus
+  semanticIndexStatus: AiTaskStatus
+  caption: string | null
+  scene: string | null
+  lastErrorCode: string | null
+  updatedAt: string | null
+}
+
+export type ExploreQuery = {
+  query?: string
+  event?: EventSlug
+  category?: string
+  type?: MediaType
+  source?: 'guest' | 'photographer'
+  cursor?: string
+  limit?: number
+}
+
+export type ExplorePage = GalleryPage & {
+  semanticApplied: boolean
+  semanticAvailable: boolean
+}
+
+export type FavouriteLookupResponse = {
+  items: GalleryMedia[]
+  missingIds: string[]
+}
+
+export type FindMeAvailability = {
+  available: boolean
+  reason?: 'disabled' | 'provider_unavailable' | 'calibration_required' | 'index_unavailable'
+  provider?: string
+  modelVersion?: string
+  maxImageBytes: number
+  sessionTtlSeconds: number
+}
+
+export type FindMeResult = {
+  searchSessionId: string
+  expiresAt: string
+  strongMatches: GalleryMedia[]
+  possibleMatches: GalleryMedia[]
+  totalMatches: number
+}
+
+export type AiJob = {
+  id: string
+  type: 'ANALYSE_MEDIA' | 'REPROCESS_MEDIA' | 'DELETE_MEDIA_AI' | 'PURGE_MEDIA_FACES' | 'PURGE_ALL_FACES'
+  mediaId: string | null
+  status: AiJobStatus
+  attemptCount: number
+  lastErrorCode: string | null
+  lastErrorMessage: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type AdminAiStats = {
+  totalEligible: number
+  indexed: number
+  queued: number
+  processing: number
+  failed: number
+  notProcessed: number
+  categorised: number
+  faceIndexedPhotos: number
+  detectedFaces: number
+  semanticIndexed: number
+  paused: boolean
+  faceSearchAvailable: boolean
+}
+
+export type FaceCalibration = {
+  id: string
+  provider: string
+  model: string
+  modelVersion: string
+  dimensions: number
+  metric: 'cosine' | 'euclidean' | 'dot-product'
+  matchThreshold: number
+  strongMatchThreshold: number
+  notes: string | null
+  active: boolean
+  updatedAt: string
+}
+
+export type FaceCalibrationComparison = {
+  provider: string
+  model: string
+  modelVersion: string
+  dimensions: number
+  metric: 'cosine' | 'euclidean' | 'dot-product'
+  cosineSimilarity: number
+  dotProduct: number
+  euclideanDistance: number
+  leftQuality: number | null
+  rightQuality: number | null
+}
+
+export type ArchivePart = {
+  id: string
+  eventId: string
+  eventDisplayName: string
+  partNumber: number
+  filename: string
+  sizeBytes: number
+  sha256: string
+  fileCount: number
+  status: 'building' | 'complete' | 'failed'
+  planSha256?: string | null
+}
+
+export type ArchiveArtifact = {
+  id: string
+  kind: 'manifest_json' | 'manifest_csv' | 'checksums' | 'readme'
+  filename: string
+  sizeBytes: number
+  sha256: string
+}
+
+export type ArchiveJob = {
+  id: string
+  status: ArchiveJobStatus
+  scope: 'all' | 'event'
+  eventId: string | null
+  shardSizeBytes: number
+  totalFiles: number
+  totalBytes: number
+  processedFiles: number
+  processedBytes: number
+  errorMessage: string | null
+  createdAt: string
+  startedAt: string | null
+  completedAt: string | null
+  parts: ArchivePart[]
+  artifacts: ArchiveArtifact[]
 }

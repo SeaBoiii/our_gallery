@@ -68,6 +68,7 @@ export default function LivePage() {
   const eventCopy = copy[locale].upload
   const [items, setItems] = useState<GalleryMedia[]>([])
   const [source, setSource] = useState<Source>('all')
+  const [enabled, setEnabled] = useState(true)
   const [current, setCurrent] = useState<GalleryMedia | null>(null)
   const [layout, setLayout] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -77,6 +78,7 @@ export default function LivePage() {
   const refreshSequence = useRef(0)
 
   const refresh = useCallback(async () => {
+    if (!enabled) return
     const requestedSource = source
     const sequence = ++refreshSequence.current
     try {
@@ -89,7 +91,7 @@ export default function LivePage() {
       if (sequence !== refreshSequence.current || sourceRef.current !== requestedSource) return
       setError(t.reconnecting)
     }
-  }, [source, t.reconnecting])
+  }, [enabled, source, t.reconnecting])
 
   const selectSource = useCallback((nextSource: Source) => {
     if (sourceRef.current === nextSource) return
@@ -109,7 +111,7 @@ export default function LivePage() {
 
   useEffect(() => {
     const sync = async () => {
-      try { const config = await getLiveConfig(); selectSource(config.source) } catch { /* Keep the last working source. */ }
+      try { const config = await getLiveConfig(); setEnabled(config.enabled); selectSource(config.source) } catch { /* Keep the last working source. */ }
     }
     const first = window.setTimeout(() => void sync(),0)
     const timer = window.setInterval(() => void sync(),30_000)
@@ -164,7 +166,7 @@ export default function LivePage() {
         </div>
       </header>
 
-      {current ? (
+      {!enabled ? <section className="live-empty"><ImageOff aria-hidden="true" /><p className="eyebrow">{t.memoryLog}</p><h1>{locale === 'en' ? 'The live wall has landed.' : 'Paparan langsung telah mendarat.'}</h1><p>{locale === 'en' ? 'The wedding gallery remains available to browse.' : 'Galeri perkahwinan masih boleh diterokai.'}</p></section> : current ? (
         <section className="live-memory" key={current.id} aria-live="polite">
           <div className="live-media">
             {current.mediaType === 'video' ? <video src={current.displayUrl} poster={current.thumbnailUrl} autoPlay muted loop playsInline preload="auto" /> : <img src={current.displayUrl} alt={current.guestMessage || `${t.memoryFrom} ${current.event.slug === 'solemnisation' ? eventCopy.solemnisation : eventCopy.reception}`} />}

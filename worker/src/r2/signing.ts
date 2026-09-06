@@ -53,6 +53,16 @@ export async function signedGet(env: Env, key: string, ttlSeconds = 900) {
   return signed.url
 }
 
+export async function signedDownload(env: Env, key: string, filename: string, ttlSeconds = 600) {
+  const ttl = Math.min(3600, Math.max(60, ttlSeconds))
+  const safeFilename = filename.replace(/[\r\n"\\/]+/g, '_').slice(0, 180) || 'download'
+  const url = new URL(objectUrl(env, key))
+  url.searchParams.set('X-Amz-Expires', String(ttl))
+  url.searchParams.set('response-content-disposition', `attachment; filename="${safeFilename}"`)
+  const signed = await client(env).sign(new Request(url, { method: 'GET' }), { aws: { signQuery: true } })
+  return signed.url
+}
+
 export async function copyObject(env: Env, sourceKey: string, destinationKey: string, mimeType: string, sourceEtag: string): Promise<CopyObjectResult> {
   const response = await client(env).fetch(new Request(objectUrl(env, destinationKey), {
     method: 'PUT',

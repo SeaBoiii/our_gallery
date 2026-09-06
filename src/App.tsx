@@ -6,10 +6,13 @@ import { useLocale } from './context/useLocale'
 import { copy } from './i18n/copy'
 import { RouteErrorBoundary } from './components/RouteErrorBoundary'
 import { WeddingMonogram } from './components/WeddingMonogram'
+import { FavouritesProvider } from './context/FavouritesContext'
 
 const LivePage = lazy(() => import('./pages/LivePage'))
 const QrPage = lazy(() => import('./pages/QrPage'))
 const AdminPage = lazy(() => import('./pages/AdminPage'))
+const ExplorePage = lazy(() => import('./pages/ExplorePage'))
+const FindMePage = lazy(() => import('./pages/FindMePage'))
 
 function RouteLoading() {
   const { locale } = useLocale()
@@ -27,7 +30,9 @@ function RoutedContent() {
           <Route path="/gallery" element={<HomePage />} />
           <Route path="/live" element={<LivePage />} />
           <Route path="/qr" element={<QrPage />} />
-          <Route path="/admin" element={<AdminPage />} />
+          <Route path="/explore" element={<ExplorePage />} />
+          <Route path="/find-me" element={<FindMePage />} />
+          <Route path="/admin/*" element={<AdminPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
@@ -38,9 +43,11 @@ function RoutedContent() {
 export default function App() {
   return (
     <LocaleProvider>
-      <BrowserRouter>
-        <RoutedContent />
-      </BrowserRouter>
+      <FavouritesProvider>
+        <BrowserRouter>
+          <RoutedContent />
+        </BrowserRouter>
+      </FavouritesProvider>
     </LocaleProvider>
   )
 }

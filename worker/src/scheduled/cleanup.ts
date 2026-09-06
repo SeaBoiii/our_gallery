@@ -1,4 +1,6 @@
 import type { Env } from '../env'
+import { cleanupAiOutboxStatements } from '../ai/jobs'
+import { safeLog } from '../lib/log'
 import { finalKeys, finalizeUpload, stagingKeys, type FinalizableUploadRow } from '../uploads/finalize'
 
 type CleanupRow = FinalizableUploadRow & {
@@ -26,7 +28,7 @@ export async function cleanupStaleUploads(env: Env) {
       await env.DB.prepare("UPDATE media SET status='expired',deleted_at=? WHERE id=? AND status='reconciling'").bind(now,row.id).run()
     } catch (error) {
       // Keep the row reconciling so the next scheduled pass retries it.
-      console.error('Upload reconciliation failed', { mediaId: row.id, error })
+      safeLog('error', 'upload_reconciliation_failed', { mediaId: row.id, error: error instanceof Error ? error.message.slice(0, 120) : 'unknown' })
     }
   }
 
@@ -34,10 +36,14 @@ export async function cleanupStaleUploads(env: Env) {
   for (const row of deleting.results) {
     try {
       await removeAllKnownObjects(env, row)
-      await env.DB.prepare("UPDATE media SET status='deleted',deleted_at=? WHERE id=? AND status='deleting'").bind(now,row.id).run()
+      await env.DB.batch([
+        env.DB.prepare("UPDATE media SET status='deleted',deleted_at=? WHERE id=? AND status='deleting'").bind(now,row.id),
+        ...cleanupAiOutboxStatements(env, [row.id], 'system:cleanup', now),
+      ])
     } catch (error) {
       // Deletion is not declared complete until every known key is removed.
-      console.error('Media deletion retry failed', { mediaId: row.id, error })
+      console.error('Media deletion retry failed', { mediaId: row.id, error: error instanceof Error ? error.message.slice(0, 120) : 'unknown' })
+      safeLog('error', 'media_deletion_retry_failed', { mediaId: row.id, error: error instanceof Error ? error.message.slice(0, 120) : 'unknown' })
     }
   }
 
@@ -54,7 +60,7 @@ export async function cleanupStaleUploads(env: Env) {
       await env.MEDIA.delete(stagingKeys(row))
       await env.DB.prepare('UPDATE media SET staging_purged_at=? WHERE id=? AND staging_purged_at IS NULL').bind(now,row.id).run()
     } catch (error) {
-      console.error('Staging purge failed', { mediaId: row.id, error })
+      safeLog('error', 'staging_purge_failed', { mediaId: row.id, error: error instanceof Error ? error.message.slice(0, 120) : 'unknown' })
     }
   }
 
@@ -63,5 +69,7 @@ export async function cleanupStaleUploads(env: Env) {
     env.DB.prepare('DELETE FROM rate_limits WHERE expires_at < ?').bind(epoch),
     env.DB.prepare('DELETE FROM admin_sessions WHERE expires_at < ? OR (revoked_at IS NOT NULL AND revoked_at < ?)').bind(epoch,epoch-86_400),
     env.DB.prepare('DELETE FROM upload_requests WHERE expires_at < ?').bind(now),
+    env.DB.prepare('DELETE FROM search_sessions WHERE expires_at < ?').bind(now),
+    env.DB.prepare('DELETE FROM ai_rate_windows WHERE expires_at < ?').bind(epoch),
   ])
 }

@@ -11,6 +11,8 @@ node_modules
 dist
 dist-ssr
 dist-worker
+dist-worker-*
+worker/dist-worker-*
 coverage
 .wrangler
 .env
@@ -32,3 +34,4 @@ worker/.dev.vars.*
 *.njsproj
 *.sln
 *.sw?
+.archive-state/

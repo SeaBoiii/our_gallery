@@ -1,5 +1,6 @@
 import type { CompleteUploadResponse, DerivativeStatus } from '../../../shared/contracts'
 import type { Env } from '../env'
+import { approvalAiOutboxStatements } from '../ai/jobs'
 import { copyObject } from '../r2/signing'
 import { verifiedObject } from '../r2/verify'
 
@@ -63,8 +64,10 @@ export async function finalizeUpload(env: Env, row: FinalizableUploadRow): Promi
   const autoApprove = await autoApprovalEnabled(env)
   const status: CompleteUploadResponse['status'] = autoApprove && (row.media_type === 'video' || derivativeStatus === 'ready') ? 'approved' : 'pending'
   const now = new Date().toISOString()
-  const result = await env.DB.prepare(`UPDATE media SET status = ?, derivative_status = ?, display_object_key = ?, thumbnail_object_key = ?, display_size_bytes = ?, thumbnail_size_bytes = ?, approved_at = ? WHERE id = ? AND status = 'reconciling'`)
-    .bind(status, derivativeStatus, displayReady ? row.display_object_key : null, thumbnailReady ? row.thumbnail_object_key : null, displayReady ? row.display_size_bytes : 0, thumbnailReady ? row.thumbnail_size_bytes : 0, status === 'approved' ? now : null, row.id).run()
+  const statements = [env.DB.prepare(`UPDATE media SET status = ?, derivative_status = ?, display_object_key = ?, thumbnail_object_key = ?, display_size_bytes = ?, thumbnail_size_bytes = ?, approved_at = ? WHERE id = ? AND status = 'reconciling'`)
+    .bind(status, derivativeStatus, displayReady ? row.display_object_key : null, thumbnailReady ? row.thumbnail_object_key : null, displayReady ? row.display_size_bytes : 0, thumbnailReady ? row.thumbnail_size_bytes : 0, status === 'approved' ? now : null, row.id)]
+  if (status === 'approved') statements.push(...approvalAiOutboxStatements(env, [row.id], 'system:upload', now))
+  const [result] = await env.DB.batch(statements)
   if (!result.meta.changes) {
     const current = await env.DB.prepare('SELECT status, derivative_status FROM media WHERE id = ?').bind(row.id).first<{ status: string; derivative_status: DerivativeStatus }>()
     if (current?.status === 'pending' || current?.status === 'approved') return { completed: true, status: current.status, derivativeStatus: current.derivative_status }
