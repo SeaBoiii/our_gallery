@@ -37,7 +37,7 @@ describe('admin protection', () => {
         if (sql.includes('INSERT INTO admin_sessions')) activeSession = { expires:Number(bindings[2]) }
         return { changes:1 }
       },
-      batch: (statements) => { maxBindings = Math.max(maxBindings,...statements.map((statement) => statement.bindings.length)) },
+      batch: (statements) => { maxBindings = Math.max(...statements.map((statement) => statement.bindings.length)) },
     })
     const session = await createAdminSession(env)
     const request = new Request('https://api.test/api/admin/media/batch',{ method:'PATCH',headers:{ Origin:'http://localhost:5173','Content-Type':'application/json',Cookie:session.cookie.split(';')[0] },body:JSON.stringify({ ids:Array.from({ length:99 },() => crypto.randomUUID()),status:'approved' }) })

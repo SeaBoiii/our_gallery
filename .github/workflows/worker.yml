@@ -41,7 +41,5 @@ jobs:
           npx wrangler r2 bucket cors set aleem-nurul-gallery --file worker/r2-cors.production.json --force
           npx wrangler r2 bucket lifecycle remove aleem-nurul-gallery --id expire-gallery-staging || true
           npx wrangler r2 bucket lifecycle add aleem-nurul-gallery expire-gallery-staging staging/ --expire-days 1
-          npx wrangler r2 bucket lifecycle remove aleem-nurul-gallery --id abort-stale-archive-multipart || true
-          npx wrangler r2 bucket lifecycle add aleem-nurul-gallery abort-stale-archive-multipart archives/ --abort-multipart-days 1 --force
       - name: Deploy Worker
         run: npx wrangler deploy --config worker/wrangler.toml --env=""

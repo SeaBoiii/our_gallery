@@ -8,55 +8,6 @@ routes = [{ pattern = "gallery-api.aleemxnurul.love", custom_domain = true }]
 enabled = true
 head_sampling_rate = 1
 
-[ai]
-binding = "AI"
-
-[[vectorize]]
-binding = "SEMANTIC_INDEX"
-index_name = "aleem-nurul-wedding-semantic"
-
-# FACE_INDEX is intentionally absent in production. Add the binding only after
-# selecting a provider with documented dimensions/metric and creating the
-# matching index; see README.md and docs/privacy-ai.md.
-
-[[queues.producers]]
-binding = "AI_PROCESSING_QUEUE"
-queue = "gallery-ai-processing"
-
-[[queues.producers]]
-binding = "CLEANUP_QUEUE"
-queue = "gallery-cleanup"
-
-[[queues.consumers]]
-queue = "gallery-ai-processing"
-max_batch_size = 10
-max_batch_timeout = 5
-max_retries = 5
-dead_letter_queue = "gallery-ai-dead-letter"
-max_concurrency = 5
-retry_delay = 60
-
-[[queues.consumers]]
-queue = "gallery-ai-dead-letter"
-max_batch_size = 10
-max_batch_timeout = 5
-max_retries = 3
-max_concurrency = 1
-
-[[queues.consumers]]
-queue = "gallery-cleanup"
-max_batch_size = 10
-max_batch_timeout = 5
-max_retries = 5
-dead_letter_queue = "gallery-ai-dead-letter"
-max_concurrency = 2
-retry_delay = 60
-
-[[workflows]]
-name = "gallery-media-analysis"
-binding = "MEDIA_ANALYSIS_WORKFLOW"
-class_name = "MediaAnalysisWorkflow"
-
 [[d1_databases]]
 binding = "DB"
 database_name = "aleem-nurul-gallery-db"
@@ -79,18 +30,6 @@ UPLOAD_URL_TTL_SECONDS = "600"
 ADMIN_SESSION_TTL_SECONDS = "28800"
 SOFT_STORAGE_WARNING_GB = "450"
 HARD_STORAGE_LIMIT_GB = ""
-MOCK_AI = "false"
-VISION_MODEL = "@cf/google/gemma-4-26b-a4b-it"
-VISION_MODEL_VERSION = "2026-04"
-SEMANTIC_MODEL = "@cf/qwen/qwen3-embedding-0.6b"
-SEMANTIC_MODEL_VERSION = "2025-06"
-SEMANTIC_EMBEDDING_DIMENSIONS = "1024"
-AI_PROCESSING_MAX_PER_MINUTE = "30"
-FACE_PROVIDER = ""
-FACE_QUERY_TOP_K = "100"
-FIND_ME_MAX_IMAGE_BYTES = "6291456"
-SEARCH_SESSION_TTL_SECONDS = "600"
-ARCHIVE_DOWNLOAD_TTL_SECONDS = "600"
 
 [triggers]
 crons = ["*/15 * * * *"]
@@ -98,9 +37,6 @@ crons = ["*/15 * * * *"]
 [env.development]
 name = "aleem-nurul-gallery-api-dev"
 routes = []
-
-[env.development.ai]
-binding = "AI"
 
 [[env.development.d1_databases]]
 binding = "DB"
@@ -111,50 +47,6 @@ migrations_dir = "migrations"
 [[env.development.r2_buckets]]
 binding = "MEDIA"
 bucket_name = "aleem-nurul-gallery-dev"
-
-[[env.development.vectorize]]
-binding = "SEMANTIC_INDEX"
-index_name = "aleem-nurul-wedding-semantic-dev"
-
-[[env.development.vectorize]]
-binding = "FACE_INDEX"
-index_name = "aleem-nurul-wedding-faces-dev"
-
-[[env.development.queues.producers]]
-binding = "AI_PROCESSING_QUEUE"
-queue = "gallery-ai-processing-dev"
-
-[[env.development.queues.producers]]
-binding = "CLEANUP_QUEUE"
-queue = "gallery-cleanup-dev"
-
-[[env.development.queues.consumers]]
-queue = "gallery-ai-processing-dev"
-max_batch_size = 5
-max_batch_timeout = 2
-max_retries = 3
-dead_letter_queue = "gallery-ai-dead-letter-dev"
-max_concurrency = 1
-
-[[env.development.queues.consumers]]
-queue = "gallery-ai-dead-letter-dev"
-max_batch_size = 5
-max_batch_timeout = 2
-max_retries = 1
-max_concurrency = 1
-
-[[env.development.queues.consumers]]
-queue = "gallery-cleanup-dev"
-max_batch_size = 5
-max_batch_timeout = 2
-max_retries = 3
-dead_letter_queue = "gallery-ai-dead-letter-dev"
-max_concurrency = 1
-
-[[env.development.workflows]]
-name = "gallery-media-analysis-dev"
-binding = "MEDIA_ANALYSIS_WORKFLOW"
-class_name = "MediaAnalysisWorkflow"
 
 [env.development.vars]
 ENVIRONMENT = "development"
@@ -168,21 +60,3 @@ UPLOAD_URL_TTL_SECONDS = "600"
 ADMIN_SESSION_TTL_SECONDS = "28800"
 SOFT_STORAGE_WARNING_GB = "450"
 HARD_STORAGE_LIMIT_GB = ""
-MOCK_AI = "true"
-VISION_MODEL = "mock"
-VISION_MODEL_VERSION = "mock-v1"
-SEMANTIC_MODEL = "mock"
-SEMANTIC_MODEL_VERSION = "mock-v1"
-SEMANTIC_EMBEDDING_DIMENSIONS = "16"
-AI_PROCESSING_MAX_PER_MINUTE = "120"
-FACE_PROVIDER = "mock"
-FACE_EMBEDDING_MODEL = "deterministic-development-face"
-FACE_EMBEDDING_MODEL_VERSION = "mock-v1"
-FACE_EMBEDDING_DIMENSIONS = "16"
-FACE_DISTANCE_METRIC = "cosine"
-FACE_SCORE_MIN = "0"
-FACE_SCORE_MAX = "1"
-FACE_QUERY_TOP_K = "100"
-FIND_ME_MAX_IMAGE_BYTES = "6291456"
-SEARCH_SESSION_TTL_SECONDS = "600"
-ARCHIVE_DOWNLOAD_TTL_SECONDS = "600"

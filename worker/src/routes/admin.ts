@@ -1,14 +1,12 @@
-import type { AdminMedia, AdminMediaPage, AdminSession, AdminStats, AiTaskStatus, EventSlug, GalleryCategory, GallerySettings, MediaStatus } from '../../../shared/contracts'
+import type { AdminMedia, AdminMediaPage, AdminSession, AdminStats, EventSlug, GallerySettings, MediaStatus } from '../../../shared/contracts'
 import type { Env } from '../env'
-import { approvalAiOutboxStatements, cleanupAiOutboxStatements } from '../ai/jobs'
 import { HttpError, isHttpError, json, parseJson, requireOrigin } from '../lib/http'
-import { signedDownload, signedGet } from '../r2/signing'
+import { signedGet } from '../r2/signing'
 import { clearAdminCookie, createAdminSession, requireAdmin, revokeAdminSession, verifyAdminPassword } from '../security/adminSession'
 import { clientIp, rateLimit } from '../security/rateLimit'
 
 type AdminMediaRow = {
-  id: string; event_slug: EventSlug; event_display_name: string; media_type: 'photo' | 'video'; mime_type: string; original_object_key: string; display_object_key: string | null; thumbnail_object_key: string | null; original_filename: string; guest_name: string | null; guest_message: string | null; status: MediaStatus; derivative_status: AdminMedia['derivativeStatus']; size_bytes: number; created_at: string; face_search_enabled: number
-  overall_status: AiTaskStatus | null; categorisation_status: AiTaskStatus | null; caption_status: AiTaskStatus | null; face_index_status: AiTaskStatus | null; semantic_index_status: AiTaskStatus | null; ai_caption: string | null; ai_scene: string | null; last_error_code: string | null; ai_updated_at: string | null; categories_json: string | null
+  id: string; event_slug: EventSlug; event_display_name: string; media_type: 'photo' | 'video'; mime_type: string; original_object_key: string; display_object_key: string | null; thumbnail_object_key: string | null; original_filename: string; guest_name: string | null; guest_message: string | null; status: MediaStatus; derivative_status: AdminMedia['derivativeStatus']; size_bytes: number; created_at: string
 }
 
 function validUuid(value: string) { return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value) }
@@ -80,15 +78,10 @@ function decodeCursor(value: string | null) {
 }
 
 async function mapAdminMedia(env: Env, row: AdminMediaRow): Promise<AdminMedia> {
-  let categories: GalleryCategory[] = []
-  try { categories = JSON.parse(row.categories_json || '[]') as GalleryCategory[] } catch { categories = [] }
   return {
     id: row.id, eventSlug: row.event_slug, eventDisplayName: row.event_display_name, mediaType: row.media_type, mimeType: row.mime_type, originalFilename: row.original_filename, guestName: row.guest_name, guestMessage: row.guest_message, status: row.status, derivativeStatus: row.derivative_status, sizeBytes: row.size_bytes, createdAt: row.created_at,
     thumbnailUrl: row.thumbnail_object_key ? await signedGet(env, row.thumbnail_object_key, 600) : null,
-    originalDownloadUrl: await signedDownload(env, row.original_object_key, row.original_filename, 300),
-    faceSearchEnabled: Boolean(row.face_search_enabled),
-    categories,
-    ai: row.overall_status ? { overallStatus:row.overall_status,categorisationStatus:row.categorisation_status!,captionStatus:row.caption_status!,faceIndexStatus:row.face_index_status!,semanticIndexStatus:row.semantic_index_status!,caption:row.ai_caption,scene:row.ai_scene,lastErrorCode:row.last_error_code,updatedAt:row.ai_updated_at } : null,
+    originalDownloadUrl: await signedGet(env, row.original_object_key, 300),
   }
 }
 
@@ -99,26 +92,18 @@ export async function adminMediaRoute(request: Request, env: Env) {
   const status = url.searchParams.get('status')
   const event = url.searchParams.get('event')
   const type = url.searchParams.get('type')
-  const category = url.searchParams.get('category')
-  const minConfidenceValue = url.searchParams.get('minConfidence')
-  const minConfidence = minConfidenceValue === null ? null : Number(minConfidenceValue)
   if (status && !['uploading','reconciling','pending','approved','rejected','deleting','deleted','expired'].includes(status)) throw new HttpError(400, 'INVALID_STATUS', 'Unknown moderation status.')
   if (event && !['solemnisation','reception'].includes(event)) throw new HttpError(400, 'INVALID_EVENT', 'Unknown event.')
   if (type && !['photo','video'].includes(type)) throw new HttpError(400, 'INVALID_TYPE', 'Unknown media type.')
-  if (category && !/^[a-z0-9-]{1,64}$/.test(category)) throw new HttpError(400, 'INVALID_CATEGORY', 'Unknown category.')
-  if (minConfidence !== null && (!Number.isFinite(minConfidence) || minConfidence < 0 || minConfidence > 1)) throw new HttpError(400, 'INVALID_CONFIDENCE', 'Confidence must be between zero and one.')
   const cursor = decodeCursor(url.searchParams.get('cursor'))
   const clauses = ["m.status NOT IN ('deleted','expired')"]
   const bindings: unknown[] = []
   if (status) { clauses.push('m.status=?'); bindings.push(status) }
   if (event) { clauses.push('e.slug=?'); bindings.push(event) }
   if (type) { clauses.push('m.media_type=?'); bindings.push(type) }
-  if (category) { clauses.push(`EXISTS (SELECT 1 FROM media_categories fmc JOIN categories fc ON fc.id=fmc.category_id WHERE fmc.media_id=m.id AND fc.slug=?${minConfidence === null ? '' : ' AND COALESCE(fmc.confidence,1)>=?'})`); bindings.push(category); if (minConfidence !== null) bindings.push(minConfidence) }
   if (cursor) { clauses.push('(m.created_at < ? OR (m.created_at = ? AND m.id < ?))'); bindings.push(cursor.createdAt,cursor.createdAt,cursor.id) }
-  const result = await env.DB.prepare(`SELECT m.id,m.media_type,m.mime_type,m.original_object_key,m.display_object_key,m.thumbnail_object_key,m.original_filename,m.guest_name,m.guest_message,m.status,m.derivative_status,m.size_bytes,m.created_at,m.face_search_enabled,e.slug AS event_slug,e.display_name AS event_display_name,
-    ma.overall_status,ma.categorisation_status,ma.caption_status,ma.face_index_status,ma.semantic_index_status,ma.caption AS ai_caption,ma.scene AS ai_scene,ma.last_error_code,ma.updated_at AS ai_updated_at,
-    (SELECT json_group_array(json_object('id',c.id,'slug',c.slug,'displayName',c.display_name,'confidence',mc.confidence,'source',mc.source)) FROM media_categories mc JOIN categories c ON c.id=mc.category_id WHERE mc.media_id=m.id AND c.enabled=1) AS categories_json
-    FROM media m JOIN events e ON e.id=m.event_id LEFT JOIN media_ai ma ON ma.media_id=m.id WHERE ${clauses.join(' AND ')} ORDER BY m.created_at DESC,m.id DESC LIMIT 31`).bind(...bindings).all<AdminMediaRow>()
+  const result = await env.DB.prepare(`SELECT m.id,m.media_type,m.mime_type,m.original_object_key,m.display_object_key,m.thumbnail_object_key,m.original_filename,m.guest_name,m.guest_message,m.status,m.derivative_status,m.size_bytes,m.created_at,e.slug AS event_slug,e.display_name AS event_display_name
+    FROM media m JOIN events e ON e.id=m.event_id WHERE ${clauses.join(' AND ')} ORDER BY m.created_at DESC,m.id DESC LIMIT 31`).bind(...bindings).all<AdminMediaRow>()
   const rows = result.results.slice(0,30)
   const page: AdminMediaPage = { items: await Promise.all(rows.map((row) => mapAdminMedia(env,row))), nextCursor: result.results.length > 30 && rows.length ? encodeCursor(rows[rows.length-1]) : null }
   return json(request, env, page, 200, { 'Cache-Control': 'no-store' })
@@ -132,18 +117,12 @@ export async function adminBatchMediaRoute(request: Request, env: Env) {
   const status = payload.status!
   const timestampColumn = status === 'approved' ? 'approved_at' : 'rejected_at'
   const now = new Date().toISOString()
-  const chunks = Array.from({ length: Math.ceil(payload.ids.length / 90) }, (_, index) => payload.ids!.slice(index * 90, index * 90 + 90))
-  let updated = 0
-  for (const ids of chunks) {
+  const chunks = Array.from({ length: Math.ceil(payload.ids.length / 98) }, (_, index) => payload.ids!.slice(index * 98, index * 98 + 98))
+  const results = await env.DB.batch(chunks.map((ids) => {
     const placeholders = ids.map(() => '?').join(',')
-    const update = env.DB.prepare(`UPDATE media SET status=?, ${timestampColumn}=?,moderation_revision=moderation_revision+1
-      WHERE id IN (${placeholders}) AND status IN ('pending','approved','rejected') AND status<>?`).bind(status,now,...ids,status)
-    const outbox = status === 'approved'
-      ? approvalAiOutboxStatements(env, ids, `session:${admin.sessionHash.slice(0,12)}`, now)
-      : cleanupAiOutboxStatements(env, ids, `session:${admin.sessionHash.slice(0,12)}`, now)
-    const [result] = await env.DB.batch([update, ...outbox])
-    updated += Number(result.meta.changes || 0)
-  }
+    return env.DB.prepare(`UPDATE media SET status=?, ${timestampColumn}=? WHERE id IN (${placeholders}) AND status IN ('pending','approved','rejected')`).bind(status,now,...ids)
+  }))
+  const updated = results.reduce((sum, result) => sum + Number(result.meta.changes || 0), 0)
   await env.DB.prepare('INSERT INTO audit_log (id,actor,action,target_id,metadata_json,created_at) VALUES (?,?,?,?,?,?)').bind(crypto.randomUUID(),`session:${admin.sessionHash.slice(0,12)}`,`batch_${status}`,null,JSON.stringify({ count:updated }),now).run()
   return json(request, env, { updated }, 200, { 'Cache-Control': 'no-store' })
 }
@@ -155,13 +134,7 @@ export async function adminDeleteMediaRoute(request: Request, env: Env, mediaId:
   const row = await env.DB.prepare("SELECT staging_original_object_key,staging_display_object_key,staging_thumbnail_object_key,original_object_key,display_object_key,thumbnail_object_key,status FROM media WHERE id=? AND status NOT IN ('deleted','expired')").bind(mediaId).first<{ staging_original_object_key: string; staging_display_object_key: string | null; staging_thumbnail_object_key: string | null; original_object_key: string; display_object_key: string | null; thumbnail_object_key: string | null; status: string }>()
   if (!row) throw new HttpError(404, 'MEDIA_NOT_FOUND', 'This memory could not be found.')
   const now = new Date().toISOString()
-  const [claim] = await env.DB.batch([
-    env.DB.prepare("UPDATE media SET status='deleting',deleted_at=?,moderation_revision=moderation_revision+1 WHERE id=? AND status NOT IN ('deleting','deleted','expired')").bind(now,mediaId),
-    env.DB.prepare(`UPDATE archive_jobs SET status='failed',error_code='MEDIA_DELETED_AFTER_ARCHIVE',
-      error_message='A source memory was deleted after this archive completed. Rebuild before downloading.',updated_at=?
-      WHERE status='complete' AND EXISTS (SELECT 1 FROM archive_items ai WHERE ai.archive_job_id=archive_jobs.id AND ai.media_id=?)`).bind(now,mediaId),
-    ...cleanupAiOutboxStatements(env, [mediaId], `session:${admin.sessionHash.slice(0,12)}`, now),
-  ])
+  const claim = await env.DB.prepare("UPDATE media SET status='deleting',deleted_at=? WHERE id=? AND status NOT IN ('deleting','deleted','expired')").bind(now,mediaId).run()
   if (!claim.meta.changes && row.status !== 'deleting') throw new HttpError(409, 'DELETE_CONFLICT', 'This memory changed while it was being deleted.', true)
   const keys = [row.staging_original_object_key,row.staging_display_object_key,row.staging_thumbnail_object_key,row.original_object_key,row.display_object_key,row.thumbnail_object_key].filter((key): key is string => Boolean(key))
   await env.MEDIA.delete(keys)
@@ -177,19 +150,7 @@ async function readSettings(env: Env): Promise<GallerySettings> {
   ])
   const values = new Map(settings.results.map((row) => [row.key,row.value]))
   const autoApproveValue = values.get('auto_approve_uploads')
-  const mode = values.get('event_mode')
-  return {
-    uploadsEnabled: values.get('uploads_enabled') !== 'false',
-    autoApproveUploads: autoApproveValue === 'true' || (autoApproveValue !== 'false' && env.AUTO_APPROVE_UPLOADS === 'true'),
-    liveWallSource: (values.get('live_wall_source') || 'all') as GallerySettings['liveWallSource'],
-    eventMode: mode === 'post-wedding' || mode === 'archive' ? mode : 'live',
-    aiEnabled: values.get('ai_enabled') !== 'false',
-    faceSearchEnabled: values.get('face_search_enabled') === 'true',
-    autoAiProcessing: values.get('auto_ai_processing') !== 'false',
-    semanticSearchEnabled: values.get('semantic_search_enabled') !== 'false',
-    aiProcessingPaused: values.get('ai_processing_paused') === 'true',
-    events: events.results.map((row) => ({ id: row.id,slug: row.slug,name: row.name,eventDate: row.event_date,displayName: row.display_name,uploadEnabled:Boolean(row.upload_enabled) })),
-  }
+  return { uploadsEnabled: values.get('uploads_enabled') !== 'false', autoApproveUploads: autoApproveValue === 'true' || (autoApproveValue !== 'false' && env.AUTO_APPROVE_UPLOADS === 'true'), liveWallSource: (values.get('live_wall_source') || 'all') as GallerySettings['liveWallSource'], events: events.results.map((row) => ({ id: row.id,slug: row.slug,name: row.name,eventDate: row.event_date,displayName: row.display_name,uploadEnabled:Boolean(row.upload_enabled) })) }
 }
 
 export async function adminSettingsRoute(request: Request, env: Env) {
@@ -201,36 +162,11 @@ export async function adminSettingsRoute(request: Request, env: Env) {
 export async function adminUpdateSettingsRoute(request: Request, env: Env) {
   requireOrigin(request, env)
   const admin = await requireAdmin(request, env)
-  const payload = await parseJson<{
-    uploadsEnabled?: boolean
-    autoApproveUploads?: boolean
-    liveWallSource?: 'all' | EventSlug
-    eventMode?: GallerySettings['eventMode']
-    aiEnabled?: boolean
-    faceSearchEnabled?: boolean
-    autoAiProcessing?: boolean
-    semanticSearchEnabled?: boolean
-    aiProcessingPaused?: boolean
-    event?: { slug?: EventSlug; uploadEnabled?: boolean }
-  }>(request)
+  const payload = await parseJson<{ uploadsEnabled?: boolean; autoApproveUploads?: boolean; liveWallSource?: 'all' | EventSlug; event?: { slug?: EventSlug; uploadEnabled?: boolean } }>(request)
   const statements: D1PreparedStatement[] = []
   const now = new Date().toISOString()
   if (typeof payload.uploadsEnabled === 'boolean') statements.push(env.DB.prepare("INSERT INTO settings(key,value,updated_at) VALUES('uploads_enabled',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at").bind(String(payload.uploadsEnabled),now))
   if (typeof payload.autoApproveUploads === 'boolean') statements.push(env.DB.prepare("INSERT INTO settings(key,value,updated_at) VALUES('auto_approve_uploads',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at").bind(String(payload.autoApproveUploads),now))
-  if (payload.eventMode) {
-    if (!['live','post-wedding','archive'].includes(payload.eventMode)) throw new HttpError(400,'INVALID_EVENT_MODE','Unknown event mode.')
-    statements.push(env.DB.prepare("INSERT INTO settings(key,value,updated_at) VALUES('event_mode',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at").bind(payload.eventMode,now))
-  }
-  const phaseTwoBooleans = [
-    ['aiEnabled','ai_enabled'],
-    ['faceSearchEnabled','face_search_enabled'],
-    ['autoAiProcessing','auto_ai_processing'],
-    ['semanticSearchEnabled','semantic_search_enabled'],
-    ['aiProcessingPaused','ai_processing_paused'],
-  ] as const
-  for (const [field,key] of phaseTwoBooleans) {
-    if (typeof payload[field] === 'boolean') statements.push(env.DB.prepare(`INSERT INTO settings(key,value,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at`).bind(key,String(payload[field]),now))
-  }
   if (payload.liveWallSource) {
     if (!['all','solemnisation','reception'].includes(payload.liveWallSource)) throw new HttpError(400,'INVALID_LIVE_SOURCE','Unknown live wall source.')
     statements.push(env.DB.prepare("INSERT INTO settings(key,value,updated_at) VALUES('live_wall_source',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at").bind(payload.liveWallSource,now))

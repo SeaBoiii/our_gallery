@@ -8,9 +8,9 @@ import { base64url, secureValueHash, textEncoder } from '../security/hash'
 import { verifyTurnstile } from '../security/turnstile'
 import { extensionForMime, validateUploadFile } from '../security/validation'
 import { finalizeUpload, type FinalizableUploadRow } from '../uploads/finalize'
-import { readOperationalSettings, uploadsAllowed } from '../settings'
 
 type EventRow = { id: string; slug: EventSlug; event_date: string; display_name: string; upload_enabled: number }
+type SettingRow = { value: string }
 type UploadRequestRow = { session_hash: string; intent_hash: string; status: 'preparing' | 'prepared'; expires_at: string }
 type UploadRow = FinalizableUploadRow & {
   request_id: string
@@ -112,12 +112,12 @@ export async function prepareUploadsRoute(request: Request, env: Env) {
     rateLimit(env, `session:${session}`, 'prepare_mib', 6_144, 600, declaredMib),
   ])
 
-  const [operationalSettings, event, requestIntent] = await Promise.all([
-    readOperationalSettings(env),
+  const [uploadsEnabled, event, requestIntent] = await Promise.all([
+    env.DB.prepare("SELECT value FROM settings WHERE key = 'uploads_enabled'").first<SettingRow>(),
     env.DB.prepare('SELECT id, slug, event_date, display_name, upload_enabled FROM events WHERE slug = ?').bind(payload.eventSlug).first<EventRow>(),
     intentHash(payload),
   ])
-  if (!uploadsAllowed(operationalSettings)) throw new HttpError(403, 'UPLOADS_CLOSED', 'Memory check-in is currently closed.')
+  if (uploadsEnabled?.value === 'false') throw new HttpError(403, 'UPLOADS_CLOSED', 'Memory check-in is currently closed.')
   if (!event || !event.upload_enabled) throw new HttpError(403, 'EVENT_UPLOADS_CLOSED', 'Memory check-in for this celebration is currently closed.')
 
   const existing = await uploadRowsByRequest(env, payload.requestId)

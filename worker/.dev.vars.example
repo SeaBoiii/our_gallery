@@ -4,5 +4,3 @@ TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
 ADMIN_PASSWORD=replace-with-a-long-random-password
 ADMIN_SESSION_SECRET=replace-with-at-least-32-random-bytes
 RATE_LIMIT_SECRET=replace-with-another-long-random-secret
-ARCHIVE_BUILDER_TOKEN=replace-with-a-separate-32-byte-builder-token
-MAINTENANCE_TOKEN=replace-with-a-separate-32-byte-maintenance-token

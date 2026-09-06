@@ -17,13 +17,6 @@ const memory = (id: string, eventIndex: 0 | 1, mediaType: 'photo' | 'video', gue
   durationSeconds: mediaType === 'video' ? 4 : null,
   guestName,
   guestMessage,
-  altText: guestMessage || 'A wedding memory shared by a guest.',
-  aiCaption: guestMessage || 'Guests sharing a moment at the wedding celebration.',
-  categories: [
-    { id:eventIndex ? 'category-reception' : 'category-ceremony',slug:eventIndex ? 'reception' : 'ceremony',displayName:eventIndex ? 'Reception' : 'Ceremony',confidence:.91,source:'ai' },
-    { id:Number(id.split('-')[1]) % 2 ? 'category-candid' : 'category-group-photo',slug:Number(id.split('-')[1]) % 2 ? 'candid' : 'group-photo',displayName:Number(id.split('-')[1]) % 2 ? 'Candid' : 'Group Photo',confidence:.88,source:'ai' },
-  ],
-  source: 'guest',
   createdAt: `2027-08-${eventIndex ? '22' : '21'}T${String(9 + Number(id.split('-')[1])).padStart(2, '0')}:15:00.000Z`,
 })
 
@@ -83,11 +76,5 @@ export const mockSettings: GallerySettings = {
   uploadsEnabled: true,
   autoApproveUploads: false,
   liveWallSource: 'all',
-  eventMode: 'live',
-  aiEnabled: true,
-  faceSearchEnabled: true,
-  autoAiProcessing: true,
-  semanticSearchEnabled: true,
-  aiProcessingPaused: false,
   events: mockEvents,
 }

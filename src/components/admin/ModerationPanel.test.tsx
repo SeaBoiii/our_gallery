@@ -6,10 +6,6 @@ import { ModerationPanel } from './ModerationPanel'
 const api = vi.hoisted(() => ({
   deleteAdminMedia: vi.fn(),
   getAdminMedia: vi.fn(),
-  getDiscoveryCategories: vi.fn(),
-  backfillAdminAi: vi.fn(),
-  setAdminMediaFaceSearch: vi.fn(),
-  updateAdminMediaCategory: vi.fn(),
   updateAdminMedia: vi.fn(),
 }))
 
@@ -37,10 +33,6 @@ describe('moderation panel', () => {
     api.deleteAdminMedia.mockReset()
     api.getAdminMedia.mockReset()
     api.updateAdminMedia.mockReset()
-    api.getDiscoveryCategories.mockReset().mockResolvedValue([])
-    api.backfillAdminAi.mockReset()
-    api.setAdminMediaFaceSearch.mockReset()
-    api.updateAdminMediaCategory.mockReset()
   })
 
   it('makes the next cursor reachable with a load-more control', async () => {
