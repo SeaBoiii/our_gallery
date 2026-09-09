@@ -42,6 +42,17 @@ export type GalleryPage = {
   nextCursor: string | null
 }
 
+export type GalleryDownloadStatus = {
+  available: boolean
+  availableAt: string
+  serverTime: string
+}
+
+export type GalleryDownloadResponse = {
+  url: string
+  expiresInSeconds: number
+}
+
 export type UploadVariantIntent = {
   kind: 'display' | 'thumbnail'
   size: number

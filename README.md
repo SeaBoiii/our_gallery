@@ -29,7 +29,7 @@ Uploads never send large media bytes through Worker memory. The Worker validates
 - Per-file and overall upload progress, partial-failure recovery, and individual retry.
 - Singapore-time event defaulting for 21 and 22 August 2027.
 - SHA-256 duplicate fingerprints scoped to the same browser and event.
-- Approved-only paginated gallery, filters, lazy thumbnails, lightbox, keyboard/swipe navigation, and sharing.
+- Approved-only paginated gallery, filters, lazy thumbnails, lightbox, keyboard/swipe navigation, sharing, and original-file downloads that unlock automatically after the wedding through five-minute signed URLs.
 - English and Bahasa Melayu guest interface with local preference storage.
 - `/live` polling wall with non-repeating rotation, preloading, muted video, filters, QR, and fullscreen mode.
 - `/qr` high-contrast printable boarding card.
@@ -205,6 +205,7 @@ Non-secret production settings live in `worker/wrangler.toml`; browser-visible s
 | `ADMIN_SESSION_TTL_SECONDS` | Admin session lifetime; default 28,800 seconds (8 hours), clamped to 15 minutes–24 hours. |
 | `SOFT_STORAGE_WARNING_GB` | Informational dashboard warning; default 450 GB. |
 | `HARD_STORAGE_LIMIT_GB` | Optional admission cap. Leave empty for unlimited storage. |
+| `DOWNLOADS_AVAILABLE_AT` | Guest original-file release instant. Production uses `2027-08-23T00:00:00+08:00` (midnight Singapore time). |
 | `VITE_API_BASE_URL` | Public Worker origin compiled into the Pages build. |
 | `VITE_TURNSTILE_SITE_KEY` | Public Turnstile site key compiled into the Pages build; it is not a secret. |
 
@@ -219,7 +220,23 @@ npm run typecheck:worker
 npm run build:worker
 ```
 
-Deploy after the resource IDs and secrets are configured:
+If the Phase 2 experiment was previously deployed and then reverted, first check whether any of its consumer associations remain:
+
+```bash
+npx wrangler queues consumer list gallery-ai-processing --config worker/wrangler.toml
+npx wrangler queues consumer list gallery-cleanup --config worker/wrangler.toml
+npx wrangler queues consumer list gallery-ai-dead-letter --config worker/wrangler.toml
+```
+
+Only when a queue still lists `aleem-nurul-gallery-api`, remove that association before deploying. Remove the association only; the queue itself can remain:
+
+```bash
+npx wrangler queues consumer remove gallery-ai-processing aleem-nurul-gallery-api --config worker/wrangler.toml
+npx wrangler queues consumer remove gallery-cleanup aleem-nurul-gallery-api --config worker/wrangler.toml
+npx wrangler queues consumer remove gallery-ai-dead-letter aleem-nurul-gallery-api --config worker/wrangler.toml
+```
+
+Deploy after the resource IDs, secrets, and queue associations are confirmed:
 
 ```bash
 npx wrangler deploy --config worker/wrangler.toml --env=""
@@ -287,7 +304,9 @@ POST   /api/uploads/prepare
 POST   /api/uploads/:id/refresh
 POST   /api/uploads/:id/complete
 GET    /api/gallery
+GET    /api/gallery/download-status
 GET    /api/gallery/:id
+GET    /api/gallery/:id/download
 GET    /api/live/config
 
 POST   /api/admin/login
@@ -302,6 +321,10 @@ PATCH  /api/admin/settings
 ```
 
 All responses use a typed `{ ok, data }` or `{ ok, error }` envelope. Raw D1, R2, stack, and exception details are never returned to guests.
+
+Before `DOWNLOADS_AVAILABLE_AT`, the guest download endpoint returns HTTP `403` with error code `DOWNLOADS_NOT_YET_AVAILABLE` and `details.availableAt`. Gallery browsing remains available and the frontend keeps the download action hidden until the status endpoint confirms release.
+
+Approved photos are browsed through separate display derivatives, so their originals remain behind the timed endpoint. Approved videos currently use their original object for playback because Phase 1 has no video-transcoding pipeline; as with any browser-playable media, those streamed bytes cannot be treated as DRM-protected. The timed release controls the explicit original-download action and attachment endpoint.
 
 ## Quality checks
 

@@ -1,3 +1,5 @@
+import { parseDownloadAvailabilityTimestamp } from './lib/downloadAvailability'
+
 export interface Env {
   DB: D1Database
   MEDIA: R2Bucket
@@ -14,6 +16,7 @@ export interface Env {
   ADMIN_SESSION_SECRET: string
   RATE_LIMIT_SECRET: string
   AUTO_APPROVE_UPLOADS: string
+  DOWNLOADS_AVAILABLE_AT: string
   UPLOAD_URL_TTL_SECONDS: string
   ADMIN_SESSION_TTL_SECONDS: string
   SOFT_STORAGE_WARNING_GB: string
@@ -23,6 +26,7 @@ export interface Env {
 export const isDevelopment = (env: Env) => env.ENVIRONMENT === 'development'
 
 export function assertSafeConfiguration(env: Env) {
+  parseDownloadAvailabilityTimestamp(env.DOWNLOADS_AVAILABLE_AT)
   if (isDevelopment(env)) return
   const required = (name: keyof Env, minimum = 1) => {
     const value = typeof env[name] === 'string' ? env[name] as string : ''

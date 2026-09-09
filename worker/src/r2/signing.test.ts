@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fakeEnv } from '../../test/fake'
-import { copyObject, signedPut } from './signing'
+import { copyObject, signedDownload, signedPut } from './signing'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -49,5 +49,56 @@ describe('R2 signing', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 412 })))
 
     await expect(copyObject(fakeEnv(), 'staging/source.jpg', 'originals/final.jpg', 'image/jpeg', '"source-etag"')).resolves.toEqual({ ok: false, status: 412 })
+  })
+
+  it('signs downloads as attachments with a bounded lifetime and safe filename', async () => {
+    const signed = await signedDownload(fakeEnv(), 'originals/a memory.jpg', 'folder/unsafe\r\n"memory".jpg', 300)
+    const url = new URL(signed)
+    const disposition = url.searchParams.get('response-content-disposition') || ''
+
+    expect(url.searchParams.get('X-Amz-Expires')).toBe('300')
+    expect(disposition).toBe('attachment; filename="folder_unsafe_memory_.jpg"; filename*=UTF-8\'\'folder_unsafe_memory_.jpg')
+    expect(disposition).not.toMatch(/[\r\n]/)
+  })
+
+  it('provides an ASCII fallback and an RFC 5987 Unicode filename while stripping bidi and control characters', async () => {
+    const signed = await signedDownload(fakeEnv(), 'originals/unicode.jpg', 'Nūrul \u202e\u2066✨\u0000.jpg')
+    const disposition = new URL(signed).searchParams.get('response-content-disposition') || ''
+    const encodedUnicode = disposition.match(/filename\*=UTF-8''(.+)$/)?.[1] || ''
+
+    expect(disposition).toContain('filename="Nurul _.jpg"')
+    expect(encodedUnicode).toContain('%C5%AB')
+    expect(decodeURIComponent(encodedUnicode)).toBe('Nūrul ✨.jpg')
+    expect(disposition).not.toContain('\u0000')
+    expect(disposition).not.toContain('\u202e')
+    expect(disposition).not.toContain('\u2066')
+  })
+
+  it('neutralizes Windows device names, path characters, empty names, and trailing dots or spaces', async () => {
+    const deviceDisposition = new URL(await signedDownload(fakeEnv(), 'originals/device.jpg', 'CON.jpg')).searchParams.get('response-content-disposition') || ''
+    const reservedDisposition = new URL(await signedDownload(fakeEnv(), 'originals/reserved.jpg', ' ../bad<>:"/\\|?*.jpg. ')).searchParams.get('response-content-disposition') || ''
+    const emptyDisposition = new URL(await signedDownload(fakeEnv(), 'originals/empty', '\u202e\u0000 . ')).searchParams.get('response-content-disposition') || ''
+    const reservedUnicode = decodeURIComponent(reservedDisposition.match(/filename\*=UTF-8''(.+)$/)?.[1] || '')
+
+    expect(deviceDisposition).toContain('filename="_CON.jpg"')
+    expect(reservedUnicode).not.toMatch(/[<>:"/\\|?*]/)
+    expect(reservedUnicode).not.toMatch(/[. ]$/)
+    expect(emptyDisposition).toContain('filename="download"')
+  })
+
+  it('bounds both fallback and Unicode filenames while preserving a safe extension', async () => {
+    const disposition = new URL(await signedDownload(fakeEnv(), 'originals/long.jpeg', `${'é'.repeat(300)}.jpeg`)).searchParams.get('response-content-disposition') || ''
+    const asciiDisposition = new URL(await signedDownload(fakeEnv(), 'originals/long-ascii.jpeg', `${'a'.repeat(300)}.jpeg`)).searchParams.get('response-content-disposition') || ''
+    const fallback = disposition.match(/filename="([^"]+)"/)?.[1] || ''
+    const unicodeFilename = decodeURIComponent(disposition.match(/filename\*=UTF-8''(.+)$/)?.[1] || '')
+    const longAsciiFallback = asciiDisposition.match(/filename="([^"]+)"/)?.[1] || ''
+
+    expect(new TextEncoder().encode(fallback).byteLength).toBeLessThanOrEqual(180)
+    expect(new TextEncoder().encode(unicodeFilename).byteLength).toBeLessThanOrEqual(180)
+    expect(new TextEncoder().encode(longAsciiFallback).byteLength).toBe(180)
+    expect(fallback).toMatch(/\.jpeg$/)
+    expect(unicodeFilename).toMatch(/\.jpeg$/)
+    expect(longAsciiFallback).toMatch(/\.jpeg$/)
+    expect(fallback).toMatch(/^[\x20-\x7e]+$/)
   })
 })

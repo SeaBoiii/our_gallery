@@ -45,4 +45,10 @@ describe('worker security', () => {
     const env = { ...fakeEnv(), ENVIRONMENT:'production', TURNSTILE_BYPASS:'false', R2_ACCOUNT_ID:'REPLACE_WITH_CLOUDFLARE_ACCOUNT_ID' }
     expect(() => assertSafeConfiguration(env)).toThrowError(/R2_ACCOUNT_ID/)
   })
+
+  it('fails closed when the download release timestamp is missing, lacks a timezone, or is invalid', () => {
+    expect(() => assertSafeConfiguration({ ...fakeEnv(), DOWNLOADS_AVAILABLE_AT:'' })).toThrowError(/DOWNLOADS_AVAILABLE_AT/)
+    expect(() => assertSafeConfiguration({ ...fakeEnv(), DOWNLOADS_AVAILABLE_AT:'2027-08-23T00:00:00' })).toThrowError(/DOWNLOADS_AVAILABLE_AT/)
+    expect(() => assertSafeConfiguration({ ...fakeEnv(), DOWNLOADS_AVAILABLE_AT:'2027-02-30T00:00:00+08:00' })).toThrowError(/DOWNLOADS_AVAILABLE_AT/)
+  })
 })

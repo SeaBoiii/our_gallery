@@ -14,6 +14,10 @@ export function HomePage() {
   const mediaRef = useRef<HTMLInputElement>(null)
   const [uploaderOpen, setUploaderOpen] = useState(false)
   const [initialFiles, setInitialFiles] = useState<File[]>([])
+  const scrollToGallery = () => {
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    document.getElementById('gallery')?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' })
+  }
   const openUploader = () => { setInitialFiles([]); setUploaderOpen(true) }
   const acceptSelection = (files: FileList | null) => {
     const selected = Array.from(files || [])
@@ -23,7 +27,7 @@ export function HomePage() {
   }
 
   useEffect(() => {
-    if (window.location.pathname === '/gallery') window.setTimeout(() => document.getElementById('gallery')?.scrollIntoView(), 0)
+    if (window.location.pathname === '/gallery') window.setTimeout(() => document.getElementById('gallery')?.scrollIntoView({ behavior: 'auto' }), 0)
   }, [])
 
   return (
@@ -37,13 +41,13 @@ export function HomePage() {
           <h2 id="gallery-title">{t.galleryTitle}</h2>
           <p>{t.galleryBody}</p>
         </div>
-        <GalleryGrid />
+        <GalleryGrid onAddMemory={openUploader} />
       </section>
       <UploadExperience
         open={uploaderOpen}
         initialFiles={initialFiles}
         onClose={() => setUploaderOpen(false)}
-        onViewGallery={() => { setUploaderOpen(false); window.setTimeout(() => document.getElementById('gallery')?.scrollIntoView({ behavior: 'smooth' }), 0) }}
+        onViewGallery={() => { setUploaderOpen(false); window.setTimeout(scrollToGallery, 0) }}
       />
       <input ref={cameraRef} className="visually-hidden" type="file" accept="image/*" capture="environment" tabIndex={-1} aria-hidden="true" onChange={(event) => { acceptSelection(event.currentTarget.files); event.currentTarget.value = '' }} />
       <input ref={mediaRef} className="visually-hidden" type="file" accept="image/*,video/*" multiple tabIndex={-1} aria-hidden="true" onChange={(event) => { acceptSelection(event.currentTarget.files); event.currentTarget.value = '' }} />

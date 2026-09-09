@@ -1,8 +1,9 @@
-import type { EventSlug, GalleryMedia, GalleryPage } from '../../../shared/contracts'
+import type { EventSlug, GalleryDownloadResponse, GalleryMedia, GalleryPage } from '../../../shared/contracts'
 import type { Env } from '../env'
 import { base64url, fromBase64url, textEncoder } from '../security/hash'
+import { getGalleryDownloadStatus } from '../lib/downloadAvailability'
 import { HttpError, json } from '../lib/http'
-import { signedGet } from '../r2/signing'
+import { signedDownload, signedGet } from '../r2/signing'
 
 type MediaRow = {
   id: string
@@ -83,4 +84,23 @@ export async function galleryDetailRoute(request: Request, env: Env, mediaId: st
     FROM media m JOIN events e ON e.id = m.event_id WHERE m.id = ? AND m.status = 'approved' AND (m.media_type = 'video' OR (m.display_object_key IS NOT NULL AND m.thumbnail_object_key IS NOT NULL))`).bind(mediaId).first<MediaRow>()
   if (!row) throw new HttpError(404, 'MEDIA_NOT_FOUND', 'This memory could not be found.')
   return json(request, env, await mapMedia(env, row), 200, { 'Cache-Control': 'public, max-age=15' })
+}
+
+export function galleryDownloadStatusRoute(request: Request, env: Env) {
+  return json(request, env, getGalleryDownloadStatus(env.DOWNLOADS_AVAILABLE_AT), 200, { 'Cache-Control': 'no-store' })
+}
+
+export async function galleryDownloadRoute(request: Request, env: Env, mediaId: string) {
+  const availability = getGalleryDownloadStatus(env.DOWNLOADS_AVAILABLE_AT)
+  if (!availability.available) {
+    throw new HttpError(403, 'DOWNLOADS_NOT_YET_AVAILABLE', 'Original downloads will be available after the celebrations.', false, { availableAt: availability.availableAt })
+  }
+  if (!/^[0-9a-f-]{36}$/i.test(mediaId)) throw new HttpError(404, 'MEDIA_NOT_FOUND', 'This memory could not be found.')
+  const row = await env.DB.prepare(`SELECT m.original_object_key,m.original_filename FROM media m
+    WHERE m.id=? AND m.status='approved' AND (m.media_type='video' OR (m.display_object_key IS NOT NULL AND m.thumbnail_object_key IS NOT NULL))`)
+    .bind(mediaId).first<{ original_object_key: string; original_filename: string }>()
+  if (!row) throw new HttpError(404, 'MEDIA_NOT_FOUND', 'This memory could not be found.')
+  const ttl = 300
+  const response: GalleryDownloadResponse = { url: await signedDownload(env, row.original_object_key, row.original_filename, ttl), expiresInSeconds: ttl }
+  return json(request, env, response, 200, { 'Cache-Control': 'no-store' })
 }

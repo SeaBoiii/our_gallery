@@ -32,8 +32,10 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: npm run lint
       - run: npm run typecheck:worker
       - run: npm test
+      - run: npm run build:worker
       - name: Apply D1 migrations
         run: npx wrangler d1 migrations apply aleem-nurul-gallery-db --remote --config worker/wrangler.toml --env=""
       - name: Apply private R2 browser safeguards

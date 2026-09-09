@@ -30,6 +30,6 @@ export function fakeEnv(handlers: Handlers = {}): Env {
     delete: async () => undefined,
   } as unknown as R2Bucket
   return {
-    DB: db, MEDIA: media, ENVIRONMENT: 'development', R2_ACCOUNT_ID: 'test-account', R2_BUCKET_NAME: 'test-bucket', R2_ACCESS_KEY_ID: 'test-key', R2_SECRET_ACCESS_KEY: 'test-secret', ALLOWED_ORIGIN: 'http://localhost:5173', TURNSTILE_SECRET_KEY: 'test-turnstile', TURNSTILE_EXPECTED_HOSTNAME: 'localhost', TURNSTILE_BYPASS: 'true', ADMIN_PASSWORD: 'correct horse battery staple', ADMIN_SESSION_SECRET: '0123456789abcdef0123456789abcdef', RATE_LIMIT_SECRET: 'abcdef0123456789abcdef0123456789', AUTO_APPROVE_UPLOADS: 'false', UPLOAD_URL_TTL_SECONDS: '600', ADMIN_SESSION_TTL_SECONDS: '28800', SOFT_STORAGE_WARNING_GB: '450', HARD_STORAGE_LIMIT_GB: '',
+    DB: db, MEDIA: media, ENVIRONMENT: 'development', R2_ACCOUNT_ID: 'test-account', R2_BUCKET_NAME: 'test-bucket', R2_ACCESS_KEY_ID: 'test-key', R2_SECRET_ACCESS_KEY: 'test-secret', ALLOWED_ORIGIN: 'http://localhost:5173', TURNSTILE_SECRET_KEY: 'test-turnstile', TURNSTILE_EXPECTED_HOSTNAME: 'localhost', TURNSTILE_BYPASS: 'true', ADMIN_PASSWORD: 'correct horse battery staple', ADMIN_SESSION_SECRET: '0123456789abcdef0123456789abcdef', RATE_LIMIT_SECRET: 'abcdef0123456789abcdef0123456789', AUTO_APPROVE_UPLOADS: 'false', DOWNLOADS_AVAILABLE_AT: '2027-08-23T00:00:00+08:00', UPLOAD_URL_TTL_SECONDS: '600', ADMIN_SESSION_TTL_SECONDS: '28800', SOFT_STORAGE_WARNING_GB: '450', HARD_STORAGE_LIMIT_GB: '',
   }
 }

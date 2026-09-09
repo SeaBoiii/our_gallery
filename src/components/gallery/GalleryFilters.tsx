@@ -9,8 +9,8 @@ export function GalleryFilters({ value, onChange }: { value: GalleryFilterState;
   const t = copy[locale].gallery
 
   return (
-    <div className="gallery-filters" aria-label={t.filterAria}>
-      <div className="filter-group" aria-label={t.celebrationAria}>
+    <div className="gallery-filters" role="group" aria-label={t.filterAria}>
+      <div className="filter-group" role="group" aria-label={t.celebrationAria}>
         {([
           ['all', t.allMemories],
           ['solemnisation', t.dayOne],
@@ -20,7 +20,7 @@ export function GalleryFilters({ value, onChange }: { value: GalleryFilterState;
         ))}
       </div>
       <span className="filter-divider" aria-hidden="true" />
-      <div className="filter-group" aria-label={t.mediaAria}>
+      <div className="filter-group" role="group" aria-label={t.mediaAria}>
         {([
           ['all', t.all],
           ['photo', t.photos],

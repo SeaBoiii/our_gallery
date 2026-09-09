@@ -3,7 +3,7 @@ import { assertSafeConfiguration } from './env'
 import { HttpError, errorResponse, json, optionsResponse } from './lib/http'
 import { adminBatchMediaRoute, adminDeleteMediaRoute, adminLoginRoute, adminLogoutRoute, adminMediaRoute, adminSessionRoute, adminSettingsRoute, adminStatsRoute, adminUpdateSettingsRoute } from './routes/admin'
 import { eventsRoute } from './routes/events'
-import { galleryDetailRoute, galleryRoute } from './routes/gallery'
+import { galleryDetailRoute, galleryDownloadRoute, galleryDownloadStatusRoute, galleryRoute } from './routes/gallery'
 import { liveConfigRoute } from './routes/live'
 import { completeUploadRoute, prepareUploadsRoute, refreshUploadRoute } from './routes/uploads'
 import { cleanupStaleUploads } from './scheduled/cleanup'
@@ -20,9 +20,12 @@ export async function fetchHandler(request: Request, env: Env) {
     if (request.method === 'GET' && pathname === '/health') return json(request,env,{ status: 'ok', environment: env.ENVIRONMENT })
     if (request.method === 'GET' && pathname === '/api/events') return await eventsRoute(request,env)
     if (request.method === 'GET' && pathname === '/api/gallery') return await galleryRoute(request,env)
+    if (request.method === 'GET' && pathname === '/api/gallery/download-status') return galleryDownloadStatusRoute(request,env)
     if (request.method === 'GET' && pathname === '/api/live/config') return await liveConfigRoute(request,env)
     const galleryDetail = pathname.match(/^\/api\/gallery\/([0-9a-f-]{36})$/i)
     if (request.method === 'GET' && galleryDetail) return await galleryDetailRoute(request,env,galleryDetail[1])
+    const galleryDownload = pathname.match(/^\/api\/gallery\/([0-9a-f-]{36})\/download$/i)
+    if (request.method === 'GET' && galleryDownload) return await galleryDownloadRoute(request,env,galleryDownload[1])
 
     if (request.method === 'POST' && pathname === '/api/uploads/prepare') return await prepareUploadsRoute(request,env)
     const uploadComplete = pathname.match(/^\/api\/uploads\/([0-9a-f-]{36})\/complete$/i)

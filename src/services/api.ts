@@ -7,6 +7,8 @@ import type {
   CompleteUploadResponse,
   EventSlug,
   GalleryEvent,
+  GalleryDownloadResponse,
+  GalleryDownloadStatus,
   GalleryPage,
   GallerySettings,
   MediaStatus,
@@ -19,6 +21,7 @@ import { mockAdminMedia, mockAdminStats, mockEvents, mockGallery, mockSettings }
 
 let developmentSettings: GallerySettings = { ...mockSettings, events: mockSettings.events.map((event) => ({ ...event })) }
 const developmentSettingsSnapshot = () => ({ ...developmentSettings, events: developmentSettings.events.map((event) => ({ ...event })) })
+const mockDownloadsAvailableAt = '2027-08-23T00:00:00+08:00'
 
 export class GalleryApiError extends Error {
   code: string
@@ -99,6 +102,27 @@ export async function getGalleryMedia(mediaId: string) {
     return item
   }
   return request<GalleryPage['items'][number]>(`/api/gallery/${encodeURIComponent(mediaId)}`, {}, 2)
+}
+
+export async function getGalleryDownloadStatus(): Promise<GalleryDownloadStatus> {
+  if (USE_MOCK_DATA) {
+    const serverTime = new Date().toISOString()
+    return {
+      available: Date.parse(serverTime) >= Date.parse(mockDownloadsAvailableAt),
+      availableAt: mockDownloadsAvailableAt,
+      serverTime,
+    }
+  }
+  return request('/api/gallery/download-status')
+}
+
+export async function getMediaDownload(mediaId: string): Promise<GalleryDownloadResponse> {
+  if (USE_MOCK_DATA) {
+    const item = mockGallery.find((candidate) => candidate.id === mediaId)
+    if (!item) throw new GalleryApiError('This memory could not be found.', 'MEDIA_NOT_FOUND')
+    return { url: item.displayUrl, expiresInSeconds: 300 }
+  }
+  return request(`/api/gallery/${encodeURIComponent(mediaId)}/download`, {}, 1)
 }
 
 export async function getLiveConfig(): Promise<{ source: 'all' | EventSlug }> {
