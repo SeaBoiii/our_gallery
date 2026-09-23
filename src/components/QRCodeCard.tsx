@@ -3,10 +3,13 @@ import { Plane } from 'lucide-react'
 import { PUBLIC_GALLERY_URL } from '../config'
 import { WeddingMonogram } from './WeddingMonogram'
 import { useLocale } from '../context/useLocale'
+import { useGalleryVisibility } from '../context/useGalleryVisibility'
+import { galleryDateLabel } from '../utils/date'
 import { copy } from '../i18n/copy'
 
 export function QRCodeCard({ compact = false }: { compact?: boolean }) {
   const { locale } = useLocale()
+  const { config } = useGalleryVisibility()
   const t = copy[locale].qr
   return (
     <section className={`qr-card${compact ? ' qr-card--compact' : ''}`} aria-label={t.aria}>
@@ -18,7 +21,7 @@ export function QRCodeCard({ compact = false }: { compact?: boolean }) {
       <h2>{t.headingOne}<br />{t.headingTwo}</h2>
       <p className="qr-url">gallery.aleemxnurul.love</p>
       <div className="qr-route"><span>SIN</span><i /><Plane aria-hidden="true" /><i /><span>∞</span></div>
-      <dl><div><dt>{t.flight}</dt><dd>AN-210827</dd></div><div><dt>{t.date}</dt><dd>{t.dateValue}</dd></div><div><dt>{t.destination}</dt><dd>{t.forever}</dd></div></dl>
+      <dl><div><dt>{t.flight}</dt><dd>A&amp;N</dd></div><div><dt>{t.date}</dt><dd>{galleryDateLabel(config?.mode ?? null, locale, true)}</dd></div><div><dt>{t.destination}</dt><dd>{t.forever}</dd></div></dl>
     </section>
   )
 }

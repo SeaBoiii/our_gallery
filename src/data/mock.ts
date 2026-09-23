@@ -1,8 +1,9 @@
 import type { AdminMedia, AdminStats, GalleryEvent, GalleryMedia, GallerySettings } from '../../shared/contracts'
+import { DEFAULT_GALLERY_VISIBILITY, resolveGalleryVisibility } from '../../shared/visibility'
 
 export const mockEvents: GalleryEvent[] = [
-  { id: 'event-solemnisation', slug: 'solemnisation', name: 'solemnisation', eventDate: '2027-08-21', displayName: 'Nikah & Bride’s Reception', uploadEnabled: true },
-  { id: 'event-reception', slug: 'reception', name: 'reception', eventDate: '2027-08-22', displayName: "Groom's Reception", uploadEnabled: true },
+  { id: 'event-solemnisation', slug: 'solemnisation', name: 'solemnisation', eventDate: '2027-08-21', displayName: '21 August 2027', uploadEnabled: true },
+  { id: 'event-reception', slug: 'reception', name: 'reception', eventDate: '2027-08-22', displayName: '22 August 2027', uploadEnabled: true },
 ]
 
 const memory = (id: string, eventIndex: 0 | 1, mediaType: 'photo' | 'video', guestName: string | null, guestMessage: string | null, aspect: 'portrait' | 'landscape'): GalleryMedia => ({
@@ -73,6 +74,7 @@ export const mockAdminMedia: AdminMedia[] = mockGallery.slice(0, 6).map((item, i
 }))
 
 export const mockSettings: GallerySettings = {
+  visibility: resolveGalleryVisibility(DEFAULT_GALLERY_VISIBILITY),
   uploadsEnabled: true,
   autoApproveUploads: false,
   liveWallSource: 'all',

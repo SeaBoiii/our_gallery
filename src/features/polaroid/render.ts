@@ -9,12 +9,12 @@ export const MAX_PHOTO_BYTES = 25 * 1024 * 1024
 export const MAX_PHOTO_DIMENSION = 2400
 export const MAX_CAPTION_LENGTH = 60
 export const DEFAULT_POLAROID_SETTINGS: PolaroidSettings = {
-  frame: 'ivory', caption: '', celebration: 'both', finish: 'original',
+  frame: 'ivory', caption: '', celebration: null, finish: 'original',
   zoom: 1, positionX: 0, positionY: 0, rotation: 0,
 }
 export const DEFAULT_PHOTO_CROP: PhotoCrop = { zoom: 1, positionX: 0, positionY: 0, rotation: 0 }
 export const DEFAULT_BOOTH_SETTINGS: BoothSettings = {
-  layout: 'strip', frame: 'ivory', caption: '', celebration: 'both', finish: 'original',
+  layout: 'strip', frame: 'ivory', caption: '', celebration: null, finish: 'original',
 }
 
 export function getBoothLayout(layout: BoothLayout): BoothLayoutGeometry {
@@ -42,7 +42,7 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
 const finite = (value: number, fallback: number) => Number.isFinite(value) ? value : fallback
 
 export class PolaroidError extends Error {
-  readonly code: 'format' | 'size' | 'decode' | 'canvas' | 'export' | 'incomplete'
+  readonly code: 'format' | 'size' | 'decode' | 'canvas' | 'export' | 'incomplete' | 'date'
 
   constructor(code: PolaroidError['code'], message: string) {
     super(message)
@@ -65,7 +65,7 @@ export function normalizeBoothSettings(settings: BoothSettings): BoothSettings {
     layout: ['strip', 'grid', 'single'].includes(settings.layout) ? settings.layout : 'strip',
     frame: ['ivory', 'airmail', 'clouds'].includes(settings.frame) ? settings.frame : 'ivory',
     caption: Array.from(String(settings.caption ?? '').replace(/\s+/gu, ' ').trim()).slice(0, MAX_CAPTION_LENGTH).join(''),
-    celebration: ['both', 'solemnisation', 'reception'].includes(settings.celebration) ? settings.celebration : 'both',
+    celebration: settings.celebration === 'solemnisation' || settings.celebration === 'reception' ? settings.celebration : null,
     finish: ['original', 'warm', 'mono'].includes(settings.finish) ? settings.finish : 'original',
   }
 }
@@ -246,7 +246,7 @@ export function applyPhotoFinish(pixels: Uint8ClampedArray, finish: PolaroidSett
 }
 
 const assetCache = new Map<string, Promise<HTMLImageElement | null>>()
-function loadAsset(path: '/monogram.png' | '/polaroid-clouds.png' | '/journal-sky.webp') {
+function loadAsset(path: '/monogram.png' | '/polaroid-clouds.png' | '/photobooth-strip-clouds.png') {
   const cached = assetCache.get(path)
   if (cached) return cached
   const promise = new Promise<HTMLImageElement | null>((resolve) => {
@@ -388,6 +388,18 @@ function drawFooter(context: CanvasRenderingContext2D, settings: BoothSettings, 
   const center = layout.width / 2
   const unit = Math.min(1, layout.width / POLAROID_WIDTH)
   const top = footerStart(layout)
+  const lowerRule = layout.height - 62 * unit
+  const footerHeight = lowerRule - top
+  const hasCaption = Boolean(settings.caption.trim())
+  // A quiet, offset monogram gives the footer the feel of a printed wedding ticket.
+  if (monogram) {
+    const height = footerHeight * 0.6
+    const width = height * monogram.naturalWidth / monogram.naturalHeight
+    context.save()
+    context.globalAlpha = 0.065
+    context.drawImage(monogram, layout.width * 0.72 - width / 2, top + footerHeight * 0.2, width, height)
+    context.restore()
+  }
   context.textAlign = 'center'
   context.textBaseline = 'alphabetic'
   context.fillStyle = INK
@@ -400,31 +412,26 @@ function drawFooter(context: CanvasRenderingContext2D, settings: BoothSettings, 
     if (lines.length || !settings.caption) break
     captionSize -= 2 * unit
   }
-  if (!lines.length && settings.caption) lines = [settings.caption]
+  if (!lines.length && hasCaption) lines = [settings.caption]
   // maxWidth remains a final guard for unusual font metrics or unsupported glyphs.
-  lines.forEach((line, index) => context.fillText(line, center, top + (lines.length === 1 ? 86 : 58 + index * 55) * unit, captionWidth))
+  lines.forEach((line, index) => context.fillText(line, center, top + (lines.length === 1 ? 72 : 55 + index * 53) * unit, captionWidth))
   context.strokeStyle = GOLD
   context.lineWidth = 1
   context.beginPath()
-  context.moveTo(center - 106 * unit, top + 142 * unit)
-  context.lineTo(center + 106 * unit, top + 142 * unit)
+  context.moveTo(layout.width * 0.15, lowerRule)
+  context.lineTo(layout.width * 0.85, lowerRule)
   context.stroke()
-  if (monogram) {
-    const height = 68 * unit
-    const width = height * monogram.naturalWidth / monogram.naturalHeight
-    context.drawImage(monogram, center - width / 2, top + 158 * unit, width, height)
-  }
-  context.font = `400 ${39 * unit}px ${serif}`
-  context.fillText('Aleem & Nurulain', center, top + 270 * unit, layout.width * 0.76)
+  const nameSize = settings.layout === 'strip' ? (hasCaption ? 48 : 82) : (hasCaption ? 60 : 96)
+  context.font = `400 ${nameSize}px ${serif}`
+  context.fillText('Aleem & Nurulain', center, top + footerHeight * (hasCaption ? 0.65 : 0.57), layout.width * 0.84)
   const labels = {
-    both: '21–22 AUGUST 2027 · SINGAPORE',
-    solemnisation: '21 AUGUST 2027 · NIKAH & BRIDE’S RECEPTION',
-    reception: '22 AUGUST 2027 · GROOM’S RECEPTION',
+    solemnisation: '21 AUGUST 2027',
+    reception: '22 AUGUST 2027',
   }
-  context.font = `400 ${16 * unit}px ${MONO_FONT}`
+  context.font = `400 ${settings.layout === 'strip' ? 18 : 22}px ${MONO_FONT}`
   context.fillStyle = '#5b6672'
   // The date's baseline and descenders stay above the inner rule in every layout.
-  context.fillText(labels[settings.celebration], center, top + 299 * unit, layout.width * 0.8)
+  if (settings.celebration) context.fillText(labels[settings.celebration], center, lowerRule - 25 * unit, layout.width * 0.8)
 }
 
 const renderVersions = new WeakMap<HTMLCanvasElement, number>()
@@ -447,7 +454,7 @@ export async function drawPhotobooth(
   const [monogram, serif, clouds] = await Promise.all([
     loadAsset('/monogram.png'),
     loadSerifFont(),
-    normalized.frame === 'clouds' ? loadAsset('/polaroid-clouds.png').then((image) => image ?? loadAsset('/journal-sky.webp')) : null,
+    normalized.frame === 'clouds' ? loadAsset(normalized.layout === 'strip' ? '/photobooth-strip-clouds.png' : '/polaroid-clouds.png') : null,
   ])
   if (!current()) return
   const output = makeCanvas(layout.width, layout.height)
@@ -472,6 +479,7 @@ export async function exportPhotobooth(photos: readonly (BoothPhoto | null)[], s
   if (layout.photoRects.some((_, index) => !photos[index]?.photo)) {
     throw new PolaroidError('incomplete', 'Please add a photo to every space before saving your keepsake.')
   }
+  if (!normalized.celebration) throw new PolaroidError('date', 'Please choose a wedding date before saving your keepsake.')
   const canvas = makeCanvas(layout.width, layout.height)
   try {
     await drawPhotobooth(canvas, photos, normalized)

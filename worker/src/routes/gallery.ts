@@ -3,13 +3,15 @@ import type { Env } from '../env'
 import { base64url, fromBase64url, textEncoder } from '../security/hash'
 import { getGalleryDownloadStatus } from '../lib/downloadAvailability'
 import { HttpError, json } from '../lib/http'
-import { signedDownload, signedGet } from '../r2/signing'
+import { readGalleryPolicy, visibleMediaPredicate, type GalleryPolicy } from '../lib/galleryVisibility'
+import { signedMediaDownload } from '../security/mediaDownload'
 
-type MediaRow = {
+export type MediaRow = {
   id: string
   media_type: 'photo' | 'video'
   mime_type: string
   original_object_key: string
+  original_filename: string
   display_object_key: string | null
   thumbnail_object_key: string | null
   width: number | null
@@ -36,15 +38,15 @@ function decodeCursor(value: string | null) {
   } catch { throw new HttpError(400, 'INVALID_CURSOR', 'The gallery page cursor is invalid.') }
 }
 
-async function mapMedia(env: Env, row: MediaRow): Promise<GalleryMedia> {
-  const displayKey = row.media_type === 'video' ? row.original_object_key : row.display_object_key!
+function mapMedia(request: Request, row: MediaRow, policy: GalleryPolicy): GalleryMedia {
+  const asset = (kind: 'thumbnail' | 'display') => new URL(`/api/media/${row.id}/${kind}`, request.url).href
   return {
     id: row.id,
-    event: { id: row.event_id, slug: row.event_slug, name: row.event_name, eventDate: row.event_date, displayName: row.event_display_name, uploadEnabled: Boolean(row.event_upload_enabled) },
+    event: { id: row.event_id, slug: row.event_slug, name: 'Our Wedding', eventDate: row.event_date, displayName: row.event_display_name, uploadEnabled: policy.uploadsEnabled },
     mediaType: row.media_type,
     mimeType: row.mime_type,
-    thumbnailUrl: row.thumbnail_object_key ? await signedGet(env, row.thumbnail_object_key, 900) : '',
-    displayUrl: await signedGet(env, displayKey, 900),
+    thumbnailUrl: row.thumbnail_object_key ? asset('thumbnail') : '',
+    displayUrl: asset('display'),
     width: row.width,
     height: row.height,
     durationSeconds: row.duration_seconds,
@@ -62,8 +64,11 @@ export async function galleryRoute(request: Request, env: Env) {
   if (type && !['photo','video'].includes(type)) throw new HttpError(400, 'INVALID_MEDIA_TYPE', 'Unknown media type.')
   const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit')) || 30))
   const cursor = decodeCursor(url.searchParams.get('cursor'))
+  const policy = await readGalleryPolicy(env)
+  const visible = visibleMediaPredicate(policy)
   const clauses = ["m.status = 'approved'", "(m.media_type = 'video' OR (m.display_object_key IS NOT NULL AND m.thumbnail_object_key IS NOT NULL))"]
-  const bindings: unknown[] = []
+  clauses.push(visible.clause)
+  const bindings: unknown[] = [...visible.bindings]
   if (event) { clauses.push('e.slug = ?'); bindings.push(event) }
   if (type) { clauses.push('m.media_type = ?'); bindings.push(type) }
   if (cursor) { clauses.push('(m.created_at < ? OR (m.created_at = ? AND m.id < ?))'); bindings.push(cursor.createdAt, cursor.createdAt, cursor.id) }
@@ -71,19 +76,31 @@ export async function galleryRoute(request: Request, env: Env) {
     e.id AS event_id,e.slug AS event_slug,e.name AS event_name,e.event_date,e.display_name AS event_display_name,e.upload_enabled AS event_upload_enabled
     FROM media m JOIN events e ON e.id = m.event_id WHERE ${clauses.join(' AND ')} ORDER BY m.created_at DESC,m.id DESC LIMIT ?`)
     .bind(...bindings, limit + 1).all<MediaRow>()
+  const responsePolicy = await readGalleryPolicy(env)
+  if (responsePolicy.visibility.revision !== policy.visibility.revision || responsePolicy.uploadsEnabled !== policy.uploadsEnabled) {
+    throw new HttpError(409, 'GALLERY_VISIBILITY_CHANGED', 'The gallery changed. Please refresh the memories.', true)
+  }
   const hasMore = result.results.length > limit
   const rows = result.results.slice(0, limit)
-  const page: GalleryPage = { items: await Promise.all(rows.map((row) => mapMedia(env, row))), nextCursor: hasMore && rows.length ? encodeCursor(rows[rows.length - 1]) : null }
-  return json(request, env, page, 200, { 'Cache-Control': 'public, max-age=15, stale-while-revalidate=30' })
+  const page: GalleryPage = { items: rows.map((row) => mapMedia(request, row, policy)), nextCursor: hasMore && rows.length ? encodeCursor(rows[rows.length - 1]) : null }
+  return json(request, env, page, 200, { 'Cache-Control': 'no-store' })
+}
+
+export async function findVisibleMedia(env: Env, mediaId: string, policy: GalleryPolicy) {
+  if (!/^[0-9a-f-]{36}$/i.test(mediaId)) throw new HttpError(404, 'MEDIA_NOT_FOUND', 'This memory could not be found.')
+  const visible = visibleMediaPredicate(policy)
+  const row = await env.DB.prepare(`SELECT m.id,m.media_type,m.mime_type,m.original_object_key,m.original_filename,m.display_object_key,m.thumbnail_object_key,m.width,m.height,m.duration_seconds,m.guest_name,m.guest_message,m.created_at,
+    e.id AS event_id,e.slug AS event_slug,e.name AS event_name,e.event_date,e.display_name AS event_display_name,e.upload_enabled AS event_upload_enabled
+    FROM media m JOIN events e ON e.id = m.event_id WHERE m.id = ? AND m.status = 'approved' AND (m.media_type = 'video' OR (m.display_object_key IS NOT NULL AND m.thumbnail_object_key IS NOT NULL)) AND ${visible.clause}`).bind(mediaId, ...visible.bindings).first<MediaRow>()
+  if (!row) throw new HttpError(404, 'MEDIA_NOT_FOUND', 'This memory could not be found.')
+  const responsePolicy = await readGalleryPolicy(env)
+  if (!responsePolicy.slugs.includes(row.event_slug)) throw new HttpError(404, 'MEDIA_NOT_FOUND', 'This memory could not be found.')
+  return row
 }
 
 export async function galleryDetailRoute(request: Request, env: Env, mediaId: string) {
-  if (!/^[0-9a-f-]{36}$/i.test(mediaId)) throw new HttpError(404, 'MEDIA_NOT_FOUND', 'This memory could not be found.')
-  const row = await env.DB.prepare(`SELECT m.id,m.media_type,m.mime_type,m.original_object_key,m.display_object_key,m.thumbnail_object_key,m.width,m.height,m.duration_seconds,m.guest_name,m.guest_message,m.created_at,
-    e.id AS event_id,e.slug AS event_slug,e.name AS event_name,e.event_date,e.display_name AS event_display_name,e.upload_enabled AS event_upload_enabled
-    FROM media m JOIN events e ON e.id = m.event_id WHERE m.id = ? AND m.status = 'approved' AND (m.media_type = 'video' OR (m.display_object_key IS NOT NULL AND m.thumbnail_object_key IS NOT NULL))`).bind(mediaId).first<MediaRow>()
-  if (!row) throw new HttpError(404, 'MEDIA_NOT_FOUND', 'This memory could not be found.')
-  return json(request, env, await mapMedia(env, row), 200, { 'Cache-Control': 'public, max-age=15' })
+  const policy = await readGalleryPolicy(env)
+  return json(request, env, mapMedia(request, await findVisibleMedia(env, mediaId, policy), policy), 200, { 'Cache-Control': 'no-store' })
 }
 
 export function galleryDownloadStatusRoute(request: Request, env: Env) {
@@ -93,14 +110,10 @@ export function galleryDownloadStatusRoute(request: Request, env: Env) {
 export async function galleryDownloadRoute(request: Request, env: Env, mediaId: string) {
   const availability = getGalleryDownloadStatus(env.DOWNLOADS_AVAILABLE_AT)
   if (!availability.available) {
-    throw new HttpError(403, 'DOWNLOADS_NOT_YET_AVAILABLE', 'Original downloads will be available after the celebrations.', false, { availableAt: availability.availableAt })
+    throw new HttpError(403, 'DOWNLOADS_NOT_YET_AVAILABLE', 'Original downloads will be available after the wedding.', false, { availableAt: availability.availableAt })
   }
-  if (!/^[0-9a-f-]{36}$/i.test(mediaId)) throw new HttpError(404, 'MEDIA_NOT_FOUND', 'This memory could not be found.')
-  const row = await env.DB.prepare(`SELECT m.original_object_key,m.original_filename FROM media m
-    WHERE m.id=? AND m.status='approved' AND (m.media_type='video' OR (m.display_object_key IS NOT NULL AND m.thumbnail_object_key IS NOT NULL))`)
-    .bind(mediaId).first<{ original_object_key: string; original_filename: string }>()
-  if (!row) throw new HttpError(404, 'MEDIA_NOT_FOUND', 'This memory could not be found.')
-  const ttl = 300
-  const response: GalleryDownloadResponse = { url: await signedDownload(env, row.original_object_key, row.original_filename, ttl), expiresInSeconds: ttl }
+  const policy = await readGalleryPolicy(env)
+  await findVisibleMedia(env, mediaId, policy)
+  const response: GalleryDownloadResponse = await signedMediaDownload(request, env, mediaId)
   return json(request, env, response, 200, { 'Cache-Control': 'no-store' })
 }

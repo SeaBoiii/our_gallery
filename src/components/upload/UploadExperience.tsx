@@ -1,32 +1,37 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Camera, Check, ChevronLeft, ImagePlus, Plane, WifiOff, X } from 'lucide-react'
-import type { EventSlug, GalleryEvent, PrepareUploadRequest } from '../../../shared/contracts'
+import type { EventSlug, PrepareUploadRequest, PublicGalleryConfig } from '../../../shared/contracts'
 import { MAX_FILES_PER_BATCH, UPLOAD_CONCURRENCY, USE_MOCK_DATA } from '../../config'
 import { useLocale } from '../../context/useLocale'
+import { useGalleryVisibility } from '../../context/useGalleryVisibility'
 import { useModalFocus } from '../../hooks/useModalFocus'
 import { copy } from '../../i18n/copy'
-import { GalleryApiError, getEvents, prepareUploads } from '../../services/api'
+import { GalleryApiError, prepareUploads } from '../../services/api'
 import { UploadTransferError, uploadQueueItem } from '../../services/upload'
 import type { UploadQueueItem } from '../../types/upload'
 import { createImageDerivatives, fingerprintFile, formatBytes, getUploadMimeType, validateFile } from '../../utils/files'
-import { getSingaporeEventDefault } from '../../utils/date'
+import { eventDateLabel, galleryDateLabel } from '../../utils/date'
 import { EventSelector } from './EventSelector'
 import { TurnstileWidget } from './TurnstileWidget'
 import { UploadQueue } from './UploadQueue'
+import { uploadVisibilityCopy } from './visibilityCopy'
 
 type Props = {
   open: boolean
   initialFiles: File[]
   onClose: () => void
   onViewGallery: () => void
+  lockedEventSlug?: EventSlug
 }
 
-export function UploadExperience({ open, initialFiles, onClose, onViewGallery }: Props) {
+export function UploadExperience({ open, initialFiles, onClose, onViewGallery, lockedEventSlug }: Props) {
   const { locale } = useLocale()
   const t = copy[locale].upload
+  const v = uploadVisibilityCopy[locale]
+  const { config, status: visibilityStatus, refresh: refreshVisibility } = useGalleryVisibility()
+  const availableEvents = config?.events ?? null
   const [step, setStep] = useState(0)
-  const [eventSlug, setEventSlug] = useState<EventSlug | null>(() => getSingaporeEventDefault())
-  const [availableEvents, setAvailableEvents] = useState<GalleryEvent[] | null>(null)
+  const [eventSlug, setEventSlug] = useState<EventSlug | null>(lockedEventSlug ?? null)
   const [guestName, setGuestName] = useState('')
   const [guestMessage, setGuestMessage] = useState('')
   const [queue, setQueue] = useState<UploadQueueItem[]>([])
@@ -50,12 +55,12 @@ export function UploadExperience({ open, initialFiles, onClose, onViewGallery }:
     setQueue([])
     setGuestName('')
     setGuestMessage('')
-    setEventSlug(getSingaporeEventDefault())
+    setEventSlug(lockedEventSlug ?? null)
     setTurnstileToken(''); setVerificationVersion((value) => value + 1)
     requestIdRef.current = crypto.randomUUID()
     setErrors([])
     setStep(0)
-  }, [])
+  }, [lockedEventSlug])
   const handleClose = useCallback(() => {
     if (operationRef.current) return
     if (step === 3) reset()
@@ -118,18 +123,39 @@ export function UploadExperience({ open, initialFiles, onClose, onViewGallery }:
 
   useEffect(() => {
     if (!open) return
-    let active = true
-    void getEvents().then((events) => {
-      if (!active) return
-      setAvailableEvents(events)
-      setEventSlug((current) => events.some((event) => event.slug === current && event.uploadEnabled) ? current : events.find((event) => event.uploadEnabled)?.slug ?? null)
-      if (!events.some((event) => event.uploadEnabled)) setErrors([t.checkInClosed])
-    }).catch(() => {
-      // The prepare endpoint remains authoritative if availability cannot load.
-      if (active) setAvailableEvents(null)
-    })
-    return () => { active = false }
-  }, [open, t.checkInClosed])
+    void refreshVisibility().catch(() => undefined)
+  }, [open, refreshVisibility])
+
+  useEffect(() => {
+    if (!open || step !== 2 || operationActive || operationRef.current || !queue.length) return
+    // Transfer completion must include files added while a previous batch was pending.
+    if (queue.every(item => item.state === 'complete')) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setStep(3)
+    } else if (queue.every(item => item.state === 'complete' || item.state === 'queued')) {
+      requestIdRef.current = crypto.randomUUID()
+      setTurnstileToken('')
+      setVerificationVersion(value => value + 1)
+      setStep(1)
+    }
+  }, [open, step, operationActive, queue])
+
+  useEffect(() => {
+    if (!open || !config || operationActive || operationRef.current) return
+    if (lockedEventSlug) {
+      // Synchronize a newly exported print with its externally supplied album.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (eventSlug !== lockedEventSlug) setEventSlug(lockedEventSlug)
+      return
+    }
+    // Authorized retries retain their original association, even after the day changes.
+    if (queue.some(item => item.prepared && item.state !== 'complete')) return
+    if (config.events.some(event => event.slug === eventSlug)) return
+    const next = config.events.find(event => event.uploadEnabled)?.slug ?? config.events[0]?.slug ?? null
+    if (eventSlug && next !== eventSlug && queue.length) setErrors([v.changed])
+    requestIdRef.current = crypto.randomUUID()
+    setEventSlug(next)
+  }, [open, config, lockedEventSlug, eventSlug, operationActive, queue, v.changed])
 
   useEffect(() => {
     const onOnline = () => setOnline(true)
@@ -167,6 +193,8 @@ export function UploadExperience({ open, initialFiles, onClose, onViewGallery }:
   const localizedErrorMessage = (reason: unknown) => {
     if (reason instanceof GalleryApiError) {
       if (['UPLOADS_CLOSED', 'EVENT_UPLOADS_CLOSED'].includes(reason.code)) return t.checkInClosed
+      if (['EVENT_NOT_AVAILABLE', 'EVENT_NOT_VISIBLE'].includes(reason.code)) return lockedEventSlug ? v.locked : v.changed
+      if (reason.code === 'VISIBILITY_UNAVAILABLE') return v.unavailable
       if (['TURNSTILE_REQUIRED', 'TURNSTILE_FAILED', 'TURNSTILE_UNAVAILABLE'].includes(reason.code)) return t.verificationFailed
       if (['UPLOAD_AUTHORIZATION_EXPIRED', 'REQUEST_ID_CONFLICT', 'INVALID_UPLOAD_STATE'].includes(reason.code)) return t.checkInExpired
       if (reason.code === 'REQUEST_IN_PROGRESS') return t.checkInPreparing
@@ -240,7 +268,21 @@ export function UploadExperience({ open, initialFiles, onClose, onViewGallery }:
     setStep(2)
     const preparedItems: UploadQueueItem[] = []
     let preparedByApi = false
+    const verifyCurrentDay = async (): Promise<PublicGalleryConfig> => {
+      let fresh: PublicGalleryConfig
+      try { fresh = await refreshVisibility() }
+      catch { throw new GalleryApiError(v.unavailable, 'VISIBILITY_UNAVAILABLE', true) }
+      const target = fresh.events.find(event => event.slug === eventSlug)
+      if (!target) {
+        if (!lockedEventSlug) setEventSlug(fresh.events.find(event => event.uploadEnabled)?.slug ?? fresh.events[0]?.slug ?? null)
+        requestIdRef.current = crypto.randomUUID()
+        throw new GalleryApiError(v.changed, 'EVENT_NOT_AVAILABLE')
+      }
+      if (!fresh.uploadsEnabled || !target.uploadEnabled) throw new GalleryApiError(t.checkInClosed, 'UPLOADS_CLOSED')
+      return fresh
+    }
     try {
+      await verifyCurrentDay()
       for (const item of queue.filter((item) => item.state !== 'complete')) {
         updateItem(item.clientId, { state: 'preparing', error: undefined })
         let derivatives = item.derivatives
@@ -253,6 +295,8 @@ export function UploadExperience({ open, initialFiles, onClose, onViewGallery }:
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
       }
 
+      // Derivative generation may span a scheduled or manual date change.
+      await verifyCurrentDay()
       const payload: PrepareUploadRequest = {
         requestId: requestIdRef.current,
         eventSlug,
@@ -272,9 +316,9 @@ export function UploadExperience({ open, initialFiles, onClose, onViewGallery }:
       const response = await prepareUploads(payload)
       preparedByApi = true
       const ready = preparedItems.map((item) => ({ ...item, prepared: response.uploads.find((upload) => upload.clientId === item.clientId)! }))
-      setQueue((items) => [...items.filter((item) => item.state === 'complete'), ...ready])
-      const { failedIds, restarted } = await runConcurrent(ready)
-      if (!restarted) setStep(failedIds.length ? 2 : 3)
+      const readyById = new Map(ready.map(item => [item.clientId, item]))
+      setQueue(items => items.map(item => readyById.get(item.clientId) ?? item))
+      await runConcurrent(ready)
     } catch (reason) {
       const message = localizedErrorMessage(reason)
       setErrors([message])
@@ -298,11 +342,7 @@ export function UploadExperience({ open, initialFiles, onClose, onViewGallery }:
     updateItem(clientId, { state: 'uploading', error: undefined })
     try {
       await uploadQueueItem(item, (progress) => updateItem(clientId, { state: progress >= 100 ? 'completing' : 'uploading', progress }), { refreshBeforeUpload: true })
-      setQueue((items) => {
-        const next = items.map((candidate) => candidate.clientId === clientId ? { ...candidate, state: 'complete' as const, progress: 100, error: undefined } : candidate)
-        if (next.every((candidate) => candidate.state === 'complete')) window.setTimeout(() => setStep(3), 0)
-        return next
-      })
+      updateItem(clientId, { state: 'complete', progress: 100, error: undefined })
     } catch (reason) {
       if (reason instanceof GalleryApiError && ['UPLOAD_AUTHORIZATION_EXPIRED','INVALID_UPLOAD_STATE'].includes(reason.code)) {
         restartPreparation(localizedErrorMessage(reason))
@@ -319,21 +359,24 @@ export function UploadExperience({ open, initialFiles, onClose, onViewGallery }:
     operationRef.current = true
     setOperationActive(true)
     try {
-      const { failedIds, restarted } = await runConcurrent(remaining, true)
-      if (!restarted && !failedIds.length) setStep(3)
+      await runConcurrent(remaining, true)
     } finally { operationRef.current = false; setOperationActive(false) }
   }
 
   if (!open) return null
   const hasFilesToSend = queue.some((item) => item.state !== 'complete')
-  const canContinue = step === 0 ? hasFilesToSend : step === 1 ? Boolean(eventSlug) && hasFilesToSend && online && Boolean(turnstileToken || USE_MOCK_DATA) : false
+  const selectedEvent = availableEvents?.find(event => event.slug === eventSlug)
+  const lockedUnavailable = Boolean(config && lockedEventSlug && !config.events.some(event => event.slug === lockedEventSlug))
+  const lockedNeedsPreparation = lockedUnavailable && queue.some(item => item.state !== 'complete' && !item.prepared)
+  const lockedAuthorized = lockedUnavailable && queue.some(item => item.state !== 'complete' && item.prepared)
+  const canContinue = step === 0 ? hasFilesToSend : step === 1 ? visibilityStatus === 'ready' && Boolean(config?.uploadsEnabled && selectedEvent?.uploadEnabled) && hasFilesToSend && online && Boolean(turnstileToken || USE_MOCK_DATA) : false
   const changeDetails = (update: () => void) => { requestIdRef.current = crypto.randomUUID(); update() }
 
   return (
     <div className="upload-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !activelyUploading) handleClose() }}>
       <div ref={dialogRef} className="upload-dialog" role="dialog" aria-modal="true" aria-labelledby="upload-title" tabIndex={-1}>
         <header className="upload-header">
-          <div><p>{t.checkIn}</p><span>ALEEM & NURULAIN · 21—22.08.2027</span></div>
+          <div><p>{t.checkIn}</p><span>ALEEM & NURULAIN · {galleryDateLabel(config?.mode ?? null, locale, true)}</span></div>
           <button type="button" onClick={handleClose} disabled={activelyUploading} aria-label={t.close} data-modal-autofocus><X aria-hidden="true" /></button>
         </header>
         <div className="upload-progress-steps" aria-label={step < 2 ? `${t.step} ${step + 1} ${t.of} 2` : t.steps[step]}>
@@ -341,6 +384,7 @@ export function UploadExperience({ open, initialFiles, onClose, onViewGallery }:
         </div>
         <div className="upload-body">
           {!online ? <div className="offline-banner" role="status"><WifiOff aria-hidden="true" size={16} />{t.offline}</div> : null}
+          {!config ? <div className="offline-banner" role={visibilityStatus === 'error' ? 'alert' : 'status'}><p>{visibilityStatus === 'error' ? v.unavailable : v.loading}</p>{visibilityStatus === 'error' ? <button type="button" className="back-button" onClick={() => void refreshVisibility().catch(() => undefined)}>{v.retry}</button> : null}</div> : lockedNeedsPreparation ? <div className="offline-banner" role="alert">{v.locked}</div> : lockedAuthorized ? <div className="offline-banner" role="status">{v.authorizedRetry}</div> : !config.uploadsEnabled && step < 2 ? <div className="offline-banner" role="status">{t.checkInClosed}</div> : null}
           {step === 0 ? (
             <section><p className="eyebrow">{t.mediaEyebrow}</p><h2 id="upload-title" data-modal-focus-recovery tabIndex={-1}>{t.addMemories}</h2><p className="step-intro">{t.addMemoriesBody}</p>
               <div className="media-picker-actions">
@@ -354,7 +398,7 @@ export function UploadExperience({ open, initialFiles, onClose, onViewGallery }:
           ) : null}
           {step === 1 ? (
             <section><p className="eyebrow">{t.passengerEyebrow}</p><h2 id="upload-title" data-modal-focus-recovery tabIndex={-1}>{t.sharing}</h2><p className="step-intro">{t.sharingBody}</p>
-              <EventSelector value={eventSlug} onChange={(value) => changeDetails(() => setEventSlug(value))} events={availableEvents} />
+              {!lockedEventSlug && (availableEvents?.length ?? 0) > 1 ? <EventSelector value={eventSlug} onChange={(value) => changeDetails(() => setEventSlug(value))} events={availableEvents} /> : selectedEvent ? <p className="single-celebration"><span>{v.wedding}</span><strong>{eventDateLabel(selectedEvent.slug, locale)}</strong></p> : null}
               <div className="guest-fields">
                 <label><span>{t.name}<small>{t.optional}</small></span><input value={guestName} maxLength={80} autoComplete="name" placeholder={t.namePlaceholder} onChange={(event) => changeDetails(() => setGuestName(event.target.value))} /></label>
                 <label><span>{t.message}<small>{t.optional}</small></span><textarea value={guestMessage} maxLength={280} rows={3} placeholder={t.messagePlaceholder} onChange={(event) => changeDetails(() => setGuestMessage(event.target.value))} /><em>{guestMessage.length}/280</em></label>

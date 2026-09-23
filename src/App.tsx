@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { LocaleProvider } from './context/LocaleContext'
+import { GalleryVisibilityProvider } from './context/GalleryVisibilityContext'
 import { HomePage } from './pages/HomePage'
 import { useLocale } from './context/useLocale'
 import { copy } from './i18n/copy'
@@ -42,9 +43,11 @@ function RoutedContent() {
 export default function App() {
   return (
     <LocaleProvider>
+      <GalleryVisibilityProvider>
       <BrowserRouter>
         <RoutedContent />
       </BrowserRouter>
+      </GalleryVisibilityProvider>
     </LocaleProvider>
   )
 }

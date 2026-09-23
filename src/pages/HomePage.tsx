@@ -9,9 +9,12 @@ import { GalleryGrid } from '../components/gallery/GalleryGrid'
 import { UploadExperience } from '../components/upload/UploadExperience'
 import { copy } from '../i18n/copy'
 import { useLocale } from '../context/useLocale'
+import { useGalleryVisibility } from '../context/useGalleryVisibility'
+import { galleryDateLabel } from '../utils/date'
 
 export function HomePage() {
   const { locale } = useLocale()
+  const { config } = useGalleryVisibility()
   const t = copy[locale]
   const location = useLocation()
   const navigate = useNavigate()
@@ -56,7 +59,7 @@ export function HomePage() {
         <button className="button button-primary" type="button" onClick={openUploader}><ImagePlus size={17} aria-hidden="true" />{locale === 'en' ? 'Add your photos & videos' : 'Tambah foto & video anda'}</button>
         <p>{locale === 'en' ? 'No account needed. Just your favourite moments.' : 'Tanpa akaun. Cukup dengan detik kegemaran anda.'}</p>
       </section>
-      <footer className="site-footer"><div className="footer-signature"><WeddingMonogram compact /><p>Aleem & Nurulain<small>{locale === 'en' ? 'The beginning of always.' : 'Permulaan untuk selamanya.'}</small></p></div><span className="footer-date">21 — 22 . 08 . 2027</span><Link to="/qr">{locale === 'en' ? 'Share the gallery QR' : 'Kongsi QR galeri'}<ArrowUpRight size={15} aria-hidden="true" /></Link></footer>
+      <footer className="site-footer"><div className="footer-signature"><WeddingMonogram compact /><p>Aleem & Nurulain<small>{locale === 'en' ? 'The beginning of always.' : 'Permulaan untuk selamanya.'}</small></p></div><span className="footer-date">{galleryDateLabel(config?.mode ?? null, locale, true)}</span><Link to="/qr">{locale === 'en' ? 'Share the gallery QR' : 'Kongsi QR galeri'}<ArrowUpRight size={15} aria-hidden="true" /></Link></footer>
       <button className="mobile-share button button-primary" type="button" onClick={openUploader}><ImagePlus size={17} aria-hidden="true" />{locale === 'en' ? 'Share a memory' : 'Kongsi kenangan'}</button>
       <UploadExperience open={uploaderOpen} initialFiles={initialFiles} onClose={() => setUploaderOpen(false)} onViewGallery={() => { setUploaderOpen(false); navigate('/gallery#gallery'); window.setTimeout(scrollToGallery, 0) }} />
       <input ref={cameraRef} className="visually-hidden" type="file" accept="image/*" capture="environment" tabIndex={-1} aria-hidden="true" onChange={(event) => { acceptSelection(event.currentTarget.files); event.currentTarget.value = '' }} />

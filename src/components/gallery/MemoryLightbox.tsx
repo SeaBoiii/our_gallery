@@ -34,6 +34,7 @@ export function MemoryLightbox({ items, index, downloadsAvailable, onClose, onDo
   const touchStart = useRef<number | null>(null)
   const refreshedUrl = useRef<string | null>(null)
   const toastSequence = useRef(0)
+  const mounted = useRef(true)
   const [mediaState, setMediaState] = useState<{ itemId: string; url: string; status: MediaStatus } | null>(null)
   const [toast, setToast] = useState<Toast | null>(null)
   const [downloadBusyId, setDownloadBusyId] = useState<string | null>(null)
@@ -46,6 +47,7 @@ export function MemoryLightbox({ items, index, downloadsAvailable, onClose, onDo
   }, [index, itemCount, onIndexChange])
 
   useModalFocus(dialogRef, Boolean(item))
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
 
   useEffect(() => {
     if (!toast) return
@@ -91,6 +93,7 @@ export function MemoryLightbox({ items, index, downloadsAvailable, onClose, onDo
   const downloadBusy = downloadBusyId === item.id
 
   const announce = (message: string, tone: Toast['tone'] = 'status') => {
+    if (!mounted.current) return
     setToast({ key: ++toastSequence.current, itemId: item.id, message, tone })
   }
 
@@ -120,6 +123,7 @@ export function MemoryLightbox({ items, index, downloadsAvailable, onClose, onDo
     setDownloadBusyId(mediaId)
     try {
       const { url } = await getMediaDownload(mediaId)
+      if (!mounted.current) return
       const anchor = document.createElement('a')
       anchor.href = url
       anchor.rel = 'noopener'
@@ -132,6 +136,7 @@ export function MemoryLightbox({ items, index, downloadsAvailable, onClose, onDo
       }
       announce(t.downloadStarting)
     } catch (reason) {
+      if (!mounted.current) return
       if (reason instanceof GalleryApiError && reason.code === 'DOWNLOADS_NOT_YET_AVAILABLE') {
         onDownloadsLocked()
         announce(t.downloadUnavailable, 'error')
@@ -139,7 +144,7 @@ export function MemoryLightbox({ items, index, downloadsAvailable, onClose, onDo
         announce(t.downloadFailed, 'error')
       }
     } finally {
-      setDownloadBusyId((current) => current === mediaId ? null : current)
+      if (mounted.current) setDownloadBusyId((current) => current === mediaId ? null : current)
     }
   }
 
@@ -172,7 +177,7 @@ export function MemoryLightbox({ items, index, downloadsAvailable, onClose, onDo
   return (
     <div ref={dialogRef} className="lightbox" role="dialog" aria-modal="true" aria-label={dialogLabel} tabIndex={-1}>
       <div className="lightbox-bar">
-        <p className="lightbox-flight"><span>{eventDate}</span>{eventName}</p>
+        <p className="lightbox-flight"><span>{eventDate}</span>{copy[locale].flightMemories}</p>
         <div className="lightbox-actions">
           {downloadsAvailable ? (
             <button type="button" onClick={() => { void download().catch(() => undefined) }} disabled={downloadBusy} aria-label={t.download}>

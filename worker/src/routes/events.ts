@@ -1,15 +1,12 @@
-import type { GalleryEvent } from '../../../shared/contracts'
 import type { Env } from '../env'
 import { json } from '../lib/http'
-
-type EventRow = { id: string; slug: 'solemnisation' | 'reception'; name: string; event_date: string; display_name: string; upload_enabled: number }
+import { readPublicGalleryConfig } from '../lib/galleryVisibility'
 
 export async function eventsRoute(request: Request, env: Env) {
-  const [result, globalSetting] = await Promise.all([
-    env.DB.prepare('SELECT id, slug, name, event_date, display_name, upload_enabled FROM events ORDER BY event_date').all<EventRow>(),
-    env.DB.prepare("SELECT value FROM settings WHERE key = 'uploads_enabled'").first<{ value: string }>(),
-  ])
-  const globallyEnabled = globalSetting?.value !== 'false'
-  const events: GalleryEvent[] = result.results.map((row) => ({ id: row.id, slug: row.slug, name: row.name, eventDate: row.event_date, displayName: row.display_name, uploadEnabled: globallyEnabled && Boolean(row.upload_enabled) }))
-  return json(request, env, events, 200, { 'Cache-Control': 'public, max-age=60' })
+  const config = await readPublicGalleryConfig(env)
+  return json(request, env, config.events, 200, { 'Cache-Control': 'no-store' })
+}
+
+export async function galleryConfigRoute(request: Request, env: Env) {
+  return json(request, env, await readPublicGalleryConfig(env), 200, { 'Cache-Control': 'no-store' })
 }

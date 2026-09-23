@@ -4,6 +4,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LocaleProvider } from '../context/LocaleContext'
 import { HomePage } from './HomePage'
+import { TestVisibilityProvider } from '../test/visibility'
 
 vi.mock('../components/gallery/GalleryGrid', () => ({
   GalleryGrid: () => {
@@ -20,7 +21,7 @@ vi.mock('../components/upload/UploadExperience', () => ({
 const originalScrollIntoView = Element.prototype.scrollIntoView
 function homePage(path: string) {
   const user = userEvent.setup()
-  render(<LocaleProvider><MemoryRouter initialEntries={[path]}><HomePage /></MemoryRouter></LocaleProvider>)
+  render(<LocaleProvider><TestVisibilityProvider><MemoryRouter initialEntries={[path]}><HomePage /></MemoryRouter></TestVisibilityProvider></LocaleProvider>)
   return user
 }
 beforeEach(() => { Element.prototype.scrollIntoView = vi.fn() })

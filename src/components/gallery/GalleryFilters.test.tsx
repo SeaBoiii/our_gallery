@@ -27,6 +27,6 @@ describe('gallery filters', () => {
     render(<LocaleProvider><GalleryFilters value={{ event: 'all', type: 'all' }} onChange={vi.fn()} /></LocaleProvider>)
     expect(screen.getByRole('button', { name: 'Semua detik' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: '21 Ogos' })).toBeInTheDocument()
-    expect(screen.getByText('Bab 02')).toBeInTheDocument()
+    expect(screen.getAllByText('Perkahwinan Kami')).toHaveLength(3)
   })
 })

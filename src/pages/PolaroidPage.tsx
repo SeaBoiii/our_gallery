@@ -1,10 +1,12 @@
-﻿import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from 'react'
 import { ArrowLeft, ArrowRight, Camera, Check, Download, ImagePlus, LoaderCircle, Move, RotateCcw, RotateCw, Upload } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { LanguageToggle } from '../components/LanguageToggle'
 import { WeddingMonogram } from '../components/WeddingMonogram'
 import { UploadExperience } from '../components/upload/UploadExperience'
 import { useLocale } from '../context/useLocale'
+import { useGalleryVisibility } from '../context/useGalleryVisibility'
+import type { EventSlug, PublicGalleryConfig } from '../../shared/contracts'
 import { MAX_IMAGE_SIZE } from '../config'
 import { validateFile } from '../utils/files'
 import { CameraCapture } from '../features/polaroid/CameraCapture'
@@ -13,9 +15,19 @@ import { DEFAULT_BOOTH_SETTINGS, DEFAULT_PHOTO_CROP, boothPositionDelta, drawPho
 import type { BoothLayout, BoothPhoto, BoothSettings, PhotoCrop } from '../features/polaroid/types'
 import '../styles/polaroid.css'
 
-type StudioError = 'loadError' | 'sizeError' | 'formatError' | 'batchError' | 'spaceError' | 'renderError' | 'exportError'
+type StudioError = 'loadError' | 'sizeError' | 'formatError' | 'batchError' | 'spaceError' | 'renderError' | 'exportError' | 'visibilityError' | 'dateChanged' | 'uploadsClosed'
 type Photos = (BoothPhoto | null)[]
 type CameraSession = { count: 1 | 4; target: number | null }
+
+function visibleDate(config: PublicGalleryConfig | null, date: EventSlug | null): date is EventSlug {
+  return Boolean(config && date && (config.mode === 'both' || config.mode === date) && config.events.some(event => event.slug === date))
+}
+
+function printDate(config: PublicGalleryConfig | null, chosen: EventSlug | null): EventSlug | null {
+  if (!config) return null
+  const date = config.mode === 'both' ? chosen : config.mode
+  return visibleDate(config, date) ? date : null
+}
 
 function PhotoThumbnail({ entry }: { entry: BoothPhoto }) {
   const ref = useRef<HTMLCanvasElement>(null)
@@ -33,6 +45,7 @@ function PhotoThumbnail({ entry }: { entry: BoothPhoto }) {
 export default function PolaroidPage() {
   const { locale } = useLocale()
   const t = polaroidCopy[locale]
+  const { config, status: visibilityStatus, refresh } = useGalleryVisibility()
   const navigate = useNavigate()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const chooserRef = useRef<HTMLInputElement>(null)
@@ -54,16 +67,28 @@ export default function PolaroidPage() {
   const [saved, setSaved] = useState(false)
   const [cameraSession, setCameraSession] = useState<CameraSession | null>(null)
   const [uploadFiles, setUploadFiles] = useState<File[]>([])
+  const [uploadEvent, setUploadEvent] = useState<EventSlug>()
   const [uploaderOpen, setUploaderOpen] = useState(false)
+  const celebration = visibilityStatus === 'ready' ? printDate(config, settings.celebration) : null
+  const printSettings = useMemo(() => ({ ...settings, celebration }), [settings, celebration])
+  const visibleError = error || (visibilityStatus === 'error' ? 'visibilityError' : null)
   const layout = getBoothLayout(settings.layout)
   const required = layout.photoRects.length
   const filled = photos.slice(0, required).filter(Boolean).length
   const selectedPhoto = photos[selected]
   const crop = selectedPhoto?.crop || DEFAULT_PHOTO_CROP
   const controlsDisabled = loading || busy
-  const previewReady = previewVersion?.photos === photos && previewVersion?.settings === settings && previewVersion?.attempt === attempt
+  const previewReady = previewVersion?.photos === photos && previewVersion?.settings === printSettings && previewVersion?.attempt === attempt
+  const dateReady = visibilityStatus === 'ready' && visibleDate(config, celebration)
+  const uploadAllowed = Boolean(dateReady && config?.uploadsEnabled && config.events.find(event => event.slug === celebration)?.uploadEnabled)
 
   useEffect(() => { document.title = `Aleem & Nurulain — ${t.title}` }, [t.title])
+  useEffect(() => {
+    if (visibilityStatus !== 'ready' || !config || config.mode === 'both' || !visibleDate(config, config.mode)) return
+    const assignedDate = config.mode
+    // oxlint-disable-next-line react/set-state-in-effect -- Persist the server-assigned date so a later both-day policy keeps the valid draft selection.
+    setSettings(current => current.celebration === assignedDate ? current : { ...current, celebration: assignedDate })
+  }, [config, visibilityStatus])
   useEffect(() => {
     active.current = true
     return () => {
@@ -77,12 +102,12 @@ export default function PolaroidPage() {
     previewController.current = controller
     const frame = window.requestAnimationFrame(() => {
       if (!canvasRef.current) return
-      void drawPhotobooth(canvasRef.current, photos, settings, { signal: controller.signal }).then(() => {
-        if (!controller.signal.aborted) setPreviewVersion({ photos, settings, attempt })
+      void drawPhotobooth(canvasRef.current, photos, printSettings, { signal: controller.signal }).then(() => {
+        if (!controller.signal.aborted) setPreviewVersion({ photos, settings: printSettings, attempt })
       }).catch(() => { if (!controller.signal.aborted) setError('renderError') })
     })
     return () => { controller.abort(); window.cancelAnimationFrame(frame); if (previewController.current === controller) previewController.current = null }
-  }, [photos, settings, attempt])
+  }, [photos, printSettings, attempt])
 
   const update = (patch: Partial<BoothSettings>) => {
     if (exportActive.current) return
@@ -167,13 +192,28 @@ export default function PolaroidPage() {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
   }
   const createKeepsake = async (destination: 'download' | 'gallery') => {
-    if (filled !== required || loading || !previewReady || exportActive.current) return
+    if (filled !== required || loading || !previewReady || exportActive.current || !dateReady || !celebration) return
+    const exportedDate = celebration
+    const exportedSettings = { ...printSettings }
+    let phase: 'policy' | 'render' = 'policy'
     exportActive.current = true; setBusy(true); setError(null); setSaved(false)
     try {
-      const blob = await exportPhotobooth(photos, settings)
+      const before = await refresh()
       if (!active.current) return
+      if (!visibleDate(before, exportedDate) || printDate(before, settings.celebration) !== exportedDate) { setError('dateChanged'); return }
+      if (destination === 'gallery' && (!before.uploadsEnabled || !before.events.find(event => event.slug === exportedDate)?.uploadEnabled)) { setError('uploadsClosed'); return }
+      phase = 'render'
+      const blob = await exportPhotobooth(photos, exportedSettings)
+      if (!active.current) return
+      // Recheck after asynchronous rendering: scheduled transitions and admin changes
+      // must never release a print under an outdated date policy.
+      phase = 'policy'
+      const after = await refresh()
+      if (!active.current) return
+      if (after.revision !== before.revision || !visibleDate(after, exportedDate) || printDate(after, settings.celebration) !== exportedDate) { setError('dateChanged'); return }
+      if (destination === 'gallery' && (!after.uploadsEnabled || !after.events.find(event => event.slug === exportedDate)?.uploadEnabled)) { setError('uploadsClosed'); return }
       const file = new File([blob], `aleem-nurulain-${settings.layout}-${settings.frame}-${Date.now()}.png`, { type: 'image/png' })
-      if (destination === 'gallery') { setUploadFiles([file]); setUploaderOpen(true) }
+      if (destination === 'gallery') { setUploadFiles([file]); setUploadEvent(exportedDate); setUploaderOpen(true) }
       else {
         const url = URL.createObjectURL(file)
         const anchor = document.createElement('a')
@@ -181,14 +221,14 @@ export default function PolaroidPage() {
         try { anchor.click() } finally { anchor.remove(); window.setTimeout(() => URL.revokeObjectURL(url), 60_000) }
         setSaved(true)
       }
-    } catch { if (active.current) setError('exportError') }
+    } catch { if (active.current) setError(phase === 'policy' ? 'visibilityError' : 'exportError') }
     finally { exportActive.current = false; if (active.current) setBusy(false) }
   }
   const startBooth = () => setCameraSession({ count: required === 1 ? 1 : 4, target: null })
 
   return <main className="polaroid-page">
     <header className="studio-header"><Link className="studio-back" to="/gallery#gallery"><ArrowLeft size={16} aria-hidden="true" /><span>{t.back}</span></Link><Link className="studio-brand" to="/" aria-label="Aleem & Nurulain"><WeddingMonogram compact /></Link><LanguageToggle /></header>
-    <div className="studio-intro"><p className="eyebrow">{t.eyebrow}</p><h1>{t.heading} <em>{t.headingEm}</em></h1><p>{t.intro}</p></div>
+    <div className="studio-intro"><p className="eyebrow">{t.eyebrow}{visibilityStatus === 'ready' && config ? ` · ${config.events.filter(event => config.mode === 'both' || event.slug === config.mode).map(event => event.slug === 'solemnisation' ? t.dayOne : t.dayTwo).join(' · ')}` : ''}</p><h1>{t.heading} <em>{t.headingEm}</em></h1><p>{t.intro}</p></div>
     <div className="studio-layout">
       <div className="studio-controls">
         <section className="studio-control-section studio-source" aria-labelledby="studio-source-title"><p className="studio-source-eyebrow">{locale === 'en' ? 'ALL ABOARD, MAKE A MEMORY' : 'JOM CIPTA KENANGAN'}</p><h2 id="studio-source-title">{t.sourceLabel}</h2><p className="studio-source-description">{filled === 0 ? t.emptyBody : t.pickHint}</p><div className="studio-source-actions"><button className="studio-start-booth" type="button" onClick={startBooth} disabled={controlsDisabled}><Camera size={17} aria-hidden="true" />{required === 1 ? t.takeOne : t.camera}</button><button type="button" onClick={() => choosePhotos(null)} disabled={controlsDisabled}><ImagePlus size={17} aria-hidden="true" />{t.choose}</button></div><p className="studio-source-note">{required === 4 ? t.boothHint : t.formats}</p></section>
@@ -212,15 +252,27 @@ export default function PolaroidPage() {
         </section>
         <fieldset className="studio-control-section studio-shots" disabled={controlsDisabled}><legend><span aria-hidden="true">02</span>{t.shots}<small>{filled}/{required}</small></legend><div className="studio-shot-list">{photos.slice(0, required).map((entry, index) => <button type="button" key={index} aria-label={`${t.shot} ${index + 1}${entry ? '' : ` — ${t.emptyShot}`}`} aria-pressed={selected === index} onClick={() => setSelected(index)}>{entry ? <PhotoThumbnail entry={entry} /> : <ImagePlus size={18} aria-hidden="true" />}<span>{String(index + 1).padStart(2, '0')}</span></button>)}</div><div className="studio-selected-shot"><span>{t.selectedShot} {selected + 1}</span><div><button type="button" onClick={() => choosePhotos(selected)}><ImagePlus size={14} aria-hidden="true" />{selectedPhoto ? t.replace : t.choose}</button><button type="button" onClick={() => setCameraSession({ count: 1, target: selected })}><Camera size={14} aria-hidden="true" />{selectedPhoto ? t.retake : t.takeOne}</button></div></div>{required > 1 ? <div className="studio-reorder"><button type="button" onClick={() => reorder(-1)} disabled={controlsDisabled || selected === 0}><ArrowLeft size={14} aria-hidden="true" />{t.earlier}</button><button type="button" onClick={() => reorder(1)} disabled={controlsDisabled || selected === required - 1}>{t.later}<ArrowRight size={14} aria-hidden="true" /></button></div> : null}</fieldset>
         <fieldset className="studio-control-section" disabled={controlsDisabled}><legend><span aria-hidden="true">03</span>{t.frame}</legend><div className="studio-frame-options">{(['ivory', 'airmail', 'clouds'] as const).map(frame => <button className={`studio-frame-option studio-frame-option--${frame}`} type="button" key={frame} aria-pressed={settings.frame === frame} onClick={() => update({ frame })}><span className="studio-frame-swatch" aria-hidden="true"><span /><i>A & N</i>{settings.frame === frame ? <Check size={12} /> : null}</span><span>{t[frame]}</span></button>)}</div></fieldset>
-        <fieldset className="studio-control-section" disabled={controlsDisabled}><legend><span aria-hidden="true">04</span>{t.details}</legend><div className="studio-field"><label htmlFor="studio-caption">{t.caption}{' '}<small>{t.optional}</small></label><input id="studio-caption" value={settings.caption} onChange={event => update({ caption: event.target.value })} maxLength={60} placeholder={t.captionPlaceholder} autoComplete="off" /><span className="studio-char-count">{settings.caption.length} / 60</span></div><div className="studio-field"><label htmlFor="studio-day">{t.date}</label><select id="studio-day" value={settings.celebration} onChange={event => update({ celebration: event.target.value as BoothSettings['celebration'] })}><option value="both">{t.both}</option><option value="solemnisation">{t.dayOne}</option><option value="reception">{t.dayTwo}</option></select></div><div className="studio-finish-options" role="group" aria-label={t.finish}>{(['original', 'warm', 'mono'] as const).map(finish => <button type="button" key={finish} aria-pressed={settings.finish === finish} onClick={() => update({ finish })}>{t[finish]}</button>)}</div></fieldset>
+        <fieldset className="studio-control-section" disabled={controlsDisabled}>
+          <legend><span aria-hidden="true">04</span>{t.details}</legend>
+          <div className="studio-field"><label htmlFor="studio-caption">{t.caption}{' '}<small>{t.optional}</small></label><input id="studio-caption" value={settings.caption} onChange={event => update({ caption: event.target.value })} maxLength={60} placeholder={t.captionPlaceholder} autoComplete="off" /><span className="studio-char-count">{settings.caption.length} / 60</span></div>
+          {visibilityStatus === 'ready' && config ? config.mode === 'both' ? <div className="studio-field">
+            <label htmlFor="studio-day">{t.date}</label>
+            <select id="studio-day" value={celebration || ''} onChange={event => update({ celebration: event.target.value === 'solemnisation' || event.target.value === 'reception' ? event.target.value : null })} aria-describedby={!celebration ? 'studio-date-hint' : undefined}>
+              <option value="">{t.chooseDate}</option>
+              {config.events.map(event => <option key={event.slug} value={event.slug}>{event.slug === 'solemnisation' ? t.dayOne : t.dayTwo}</option>)}
+            </select>
+            {!celebration && <p id="studio-date-hint" className="studio-date-status">{t.dateRequired}</p>}
+          </div> : celebration ? <p className="studio-fixed-date">{t.date}<strong>{celebration === 'solemnisation' ? t.dayOne : t.dayTwo}</strong></p> : null : visibilityStatus === 'loading' ? <p className="studio-date-status" role="status">{t.checkingDates}</p> : null}
+          <div className="studio-finish-options" role="group" aria-label={t.finish}>{(['original', 'warm', 'mono'] as const).map(finish => <button type="button" key={finish} aria-pressed={settings.finish === finish} onClick={() => update({ finish })}>{t[finish]}</button>)}</div>
+        </fieldset>
         {selectedPhoto ? <fieldset className="studio-control-section studio-crop" disabled={controlsDisabled}><legend><span aria-hidden="true">05</span>{t.crop}<small>{selected + 1}</small></legend><label htmlFor="studio-zoom">{t.zoom}<output aria-hidden="true">{crop.zoom.toFixed(1)}×</output></label><input id="studio-zoom" aria-valuetext={`${crop.zoom.toFixed(1)}×`} type="range" min="1" max="3" step="0.05" value={crop.zoom} onChange={event => updateCrop({ zoom: Number(event.target.value) })} /><div className="studio-position-sliders"><div><label htmlFor="studio-x">{t.horizontal}</label><input id="studio-x" type="range" min="-1" max="1" step="0.02" value={crop.positionX} onChange={event => updateCrop({ positionX: Number(event.target.value) })} /></div><div><label htmlFor="studio-y">{t.vertical}</label><input id="studio-y" type="range" min="-1" max="1" step="0.02" value={crop.positionY} onChange={event => updateCrop({ positionY: Number(event.target.value) })} /></div></div><div className="studio-crop-actions"><button type="button" onClick={() => updateCrop({ rotation: ((crop.rotation + 90) % 360) as PhotoCrop['rotation'], positionX: 0, positionY: 0 })}><RotateCw size={14} aria-hidden="true" />{t.rotate}</button><button type="button" onClick={() => updateCrop(DEFAULT_PHOTO_CROP)}><RotateCcw size={14} aria-hidden="true" />{t.reset}</button></div></fieldset> : null}
-        {error && error !== 'renderError' ? <div className="studio-error" role="alert"><p>{t[error]}</p></div> : null}
-        <div className="studio-export"><div><button type="button" className="button button-primary" disabled={filled !== required || controlsDisabled || !previewReady} onClick={() => void createKeepsake('download')}>{busy ? <LoaderCircle className="spin" size={16} aria-hidden="true" /> : <Download size={16} aria-hidden="true" />}{busy ? t.preparing : t.save}</button><button type="button" className="button button-secondary" disabled={filled !== required || controlsDisabled || !previewReady} onClick={() => void createKeepsake('gallery')}><Upload size={16} aria-hidden="true" />{t.upload}</button></div>{filled !== required ? <p className="studio-completion-note">{filled}/{required} {t.filled}. {t.addRemaining}</p> : null}<p>{layout.width} × {layout.height} {t.output}</p><p className="studio-upload-note">{t.uploadNote}</p>{saved ? <p className="studio-saved" role="status"><Check size={15} aria-hidden="true" />{t.saved}</p> : null}</div>
+        {visibleError && visibleError !== 'renderError' ? <div className="studio-error" role="alert"><p>{t[visibleError]}</p>{visibleError === 'visibilityError' && <button type="button" disabled={busy} onClick={() => { setError(null); void refresh().catch(() => { if (active.current) setError('visibilityError') }) }}>{t.retry}</button>}</div> : null}
+        <div className="studio-export"><div><button type="button" className="button button-primary" disabled={filled !== required || controlsDisabled || !previewReady || !dateReady} onClick={() => void createKeepsake('download')}>{busy ? <LoaderCircle className="spin" size={16} aria-hidden="true" /> : <Download size={16} aria-hidden="true" />}{busy ? t.preparing : t.save}</button><button type="button" className="button button-secondary" disabled={filled !== required || controlsDisabled || !previewReady || !uploadAllowed} onClick={() => void createKeepsake('gallery')}><Upload size={16} aria-hidden="true" />{t.upload}</button></div>{filled !== required ? <p className="studio-completion-note">{filled}/{required} {t.filled}. {t.addRemaining}</p> : null}<p>{layout.width} × {layout.height} {t.output}</p><p className="studio-upload-note">{dateReady && !uploadAllowed ? t.uploadsClosed : t.uploadNote}</p>{saved ? <p className="studio-saved" role="status"><Check size={15} aria-hidden="true" />{t.saved}</p> : null}</div>
       </div>
     </div>
     <input ref={chooserRef} className="visually-hidden" type="file" multiple accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" tabIndex={-1} aria-hidden="true" onChange={event => { void openPhotos(Array.from(event.currentTarget.files || []), chooserTarget.current); event.currentTarget.value = '' }} />
     {cameraSession ? <CameraCapture shotCount={cameraSession.count} onClose={() => setCameraSession(null)} onComplete={files => { const target = cameraSession.target; setCameraSession(null); void openPhotos(files, target) }} /> : null}
-    <UploadExperience key={uploadFiles[0]?.name || 'empty'} open={uploaderOpen} initialFiles={uploadFiles} onClose={() => setUploaderOpen(false)} onViewGallery={() => navigate('/gallery#gallery')} />
+    <UploadExperience key={uploadFiles[0]?.name || 'empty'} open={uploaderOpen} initialFiles={uploadFiles} lockedEventSlug={uploadEvent} onClose={() => setUploaderOpen(false)} onViewGallery={() => navigate('/gallery#gallery')} />
     <footer className="studio-footer">Aleem <i>&</i> Nurulain <span>·</span> {locale === 'en' ? 'A little piece of our forever.' : 'Secebis kenangan selamanya.'}</footer>
   </main>
 }

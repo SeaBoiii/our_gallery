@@ -1,6 +1,7 @@
 import { AwsClient } from 'aws4fetch'
 import type { SignedUploadTarget } from '../../../shared/contracts'
 import type { Env } from '../env'
+import { HttpError } from '../lib/http'
 
 const clients = new WeakMap<Env, AwsClient>()
 const filenameEncoder = new TextEncoder()
@@ -42,13 +43,17 @@ function quotedEtag(etag: string) {
 
 export type CopyObjectResult = { ok: true; status: number } | { ok: false; status: 412 }
 
-export async function signedPut(env: Env, key: string, mimeType: string, ttlSeconds?: number): Promise<SignedUploadTarget> {
-  const ttl = putTtl(env, ttlSeconds)
+export async function signedPut(env: Env, key: string, mimeType: string, ttlSeconds?: number, authorizationExpiresAt?: string): Promise<SignedUploadTarget> {
+  const now = Date.now()
+  const remaining = authorizationExpiresAt ? Math.floor((Date.parse(authorizationExpiresAt) - now) / 1000) : Infinity
+  const ttl = Math.min(putTtl(env, ttlSeconds), remaining)
+  if (!Number.isFinite(ttl) || ttl < 1) throw new HttpError(409, 'UPLOAD_AUTHORIZATION_EXPIRED', 'This check-in has expired. Please begin again.')
   const url = new URL(objectUrl(env, key))
   url.searchParams.set('X-Amz-Expires', String(ttl))
+  const datetime = new Date(now).toISOString().replace(/[:-]|\.\d{3}/g, '')
   const requiredHeaders = { 'Content-Type': mimeType, 'If-None-Match': '*' }
-  const signed = await client(env).sign(new Request(url, { method: 'PUT', headers: requiredHeaders }), { aws: { signQuery: true, allHeaders: true } })
-  return { url: signed.url, requiredHeaders, expiresAt: new Date(Date.now() + ttl * 1000).toISOString() }
+  const signed = await client(env).sign(new Request(url, { method: 'PUT', headers: requiredHeaders }), { aws: { signQuery: true, allHeaders: true, datetime } })
+  return { url: signed.url, requiredHeaders, expiresAt: new Date(now + ttl * 1000).toISOString() }
 }
 
 export async function signedGet(env: Env, key: string, ttlSeconds = 900) {
@@ -130,7 +135,7 @@ function encodeRfc5987Value(value: string) {
   return encodeURIComponent(value).replace(/['()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`)
 }
 
-function attachmentDisposition(filename: string) {
+export function attachmentDisposition(filename: string) {
   const unicodeFilename = unicodeDownloadFilename(filename)
   const asciiFilename = asciiDownloadFilename(unicodeFilename)
   return `attachment; filename="${asciiFilename}"; filename*=UTF-8''${encodeRfc5987Value(unicodeFilename)}`

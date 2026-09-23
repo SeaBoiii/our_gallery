@@ -3,7 +3,7 @@ export type FrameId = 'ivory' | 'airmail' | 'clouds'
 export type PolaroidSettings = {
   frame: FrameId
   caption: string
-  celebration: 'both' | 'solemnisation' | 'reception'
+  celebration: EventSlug | null
   finish: 'original' | 'warm' | 'mono'
   zoom: number
   positionX: number
@@ -39,3 +39,4 @@ export type PhotoGeometry = {
   /** Crop bounds in the rotated source's coordinate system. */
   sourceCrop: { x: number; y: number; width: number; height: number }
 }
+import type { EventSlug } from '../../../shared/contracts'

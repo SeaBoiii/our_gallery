@@ -1,5 +1,7 @@
 ﻿import { ArrowDown, Camera, ImagePlus, Plane } from 'lucide-react'
 import { useLocale } from '../context/useLocale'
+import { useGalleryVisibility } from '../context/useGalleryVisibility'
+import { galleryDateLabel } from '../utils/date'
 import { copy } from '../i18n/copy'
 import { PaperPlane } from './PaperPlane'
 
@@ -11,13 +13,15 @@ type HeroProps = {
 
 export function Hero({ onAddMemory, onTakePhoto, onChooseMedia }: HeroProps) {
   const { locale } = useLocale()
+  const { config } = useGalleryVisibility()
+  const date = galleryDateLabel(config?.mode ?? null, locale)
   const t = copy[locale]
   const english = locale === 'en'
   return (
     <section className="hero" id="top" aria-labelledby="welcome-title">
       <picture className="hero-sky"><source srcSet="/journal-sky.avif" type="image/avif" /><img src="/journal-sky.webp" alt="" width="1440" height="960" fetchPriority="high" /></picture>
       <svg className="hero-flight-path" viewBox="0 0 1200 480" fill="none" aria-hidden="true"><path d="M-30 350C130 235 256 470 150 405S163 123 389 171 625 393 817 263 1008 92 1240 80" stroke="currentColor" strokeDasharray="3 7" /></svg>
-      <span className="hero-margin-note" aria-hidden="true">AN / 21.08 — 22.08 / 2027</span>
+      <span className="hero-margin-note" aria-hidden="true">AN / {date.toUpperCase()}</span>
       <div className="hero-plane"><PaperPlane /></div>
       <div className="hero-postmark" aria-hidden="true"><span>{english ? 'WITH LOVE' : 'DENGAN KASIH'}</span><b>A <i>&</i> N</b><span>SINGAPORE · 2027</span></div>
       <div className="hero-copy">
@@ -34,7 +38,7 @@ export function Hero({ onAddMemory, onTakePhoto, onChooseMedia }: HeroProps) {
       </div>
       <div className="hero-itinerary">
         <div><span>{english ? 'The newlyweds' : 'Pengantin'}</span><strong>Aleem <i>&</i> Nurulain</strong></div>
-        <div className="itinerary-route"><span>{english ? 'Two days. One beautiful beginning.' : 'Dua hari. Satu permulaan indah.'}</span><strong>21 — 22 <span>{english ? 'AUGUST' : 'OGOS'}</span> 2027</strong></div>
+        <div className="itinerary-route"><span>{english ? 'One beautiful beginning.' : 'Satu permulaan indah.'}</span><strong>{date}</strong></div>
         <div className="itinerary-destination"><span>{t.destination}</span><strong><Plane size={15} aria-hidden="true" />{t.destinationValue}</strong></div>
       </div>
     </section>

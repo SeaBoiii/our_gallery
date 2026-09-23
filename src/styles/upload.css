@@ -106,3 +106,6 @@
   .upload-footer { min-height: 70px; }
   .upload-footer .button { min-width: 130px; padding-inline: 16px; }
 }
+.single-celebration { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px 20px; margin: 22px 0; padding: 17px 0; border-block: 1px solid var(--line); color: var(--ink); }
+.single-celebration span { font: 1.2rem var(--serif); }
+.single-celebration strong { font: .72rem var(--mono); align-self: center; }

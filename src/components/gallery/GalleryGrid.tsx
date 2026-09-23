@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BookOpen, Clock3, ImagePlus, LayoutGrid, LoaderCircle, RefreshCw } from 'lucide-react'
-import type { GalleryMedia } from '../../../shared/contracts'
+import type { GalleryMedia, PublicGalleryConfig } from '../../../shared/contracts'
+import { useGalleryVisibility } from '../../context/useGalleryVisibility'
 import { GALLERY_PAGE_SIZE } from '../../config'
 import { useLocale } from '../../context/useLocale'
 import { useDownloadAvailability } from '../../hooks/useDownloadAvailability'
@@ -38,6 +39,21 @@ function matchesFilters(memory: GalleryMedia, filters: GalleryFilterState) {
 }
 
 export function GalleryGrid({ onAddMemory }: { onAddMemory: () => void }) {
+  const { config, status, refresh } = useGalleryVisibility()
+  const { locale } = useLocale()
+  const previousPolicy = useRef<string | null>(null)
+  const policy = config ? `${config.revision}|${config.mode}` : null
+  useEffect(() => {
+    if (previousPolicy.current !== null && previousPolicy.current !== policy) {
+      window.history.replaceState(historyState(false), '', memoryUrl(null))
+    }
+    previousPolicy.current = policy
+  }, [policy])
+  if (!config) return <div className="gallery-state" role={status === 'error' ? 'alert' : 'status'}><p>{status === 'error' ? (locale === 'en' ? 'The gallery is temporarily unavailable. Please try again.' : 'Galeri tidak tersedia buat sementara waktu. Sila cuba lagi.') : copy[locale].gallery.loading}</p>{status === 'error' ? <button className="button button-secondary" type="button" onClick={() => void refresh().catch(() => undefined)}>{copy[locale].tryAgain}</button> : null}</div>
+  return <ConfiguredGalleryGrid key={policy} config={config} onAddMemory={onAddMemory} />
+}
+
+function ConfiguredGalleryGrid({ config, onAddMemory }: { config: PublicGalleryConfig; onAddMemory: () => void }) {
   const { locale } = useLocale()
   const t = copy[locale].gallery
   const [filters, setFilters] = useState<GalleryFilterState>({ event: 'all', type: 'all' })
@@ -59,6 +75,7 @@ export function GalleryGrid({ onAddMemory }: { onAddMemory: () => void }) {
   const filtersRef = useRef(filters)
   const paginationRequest = useRef<number | null>(null)
   const firstQuery = useRef(true)
+  const mounted = useRef(true)
   const { downloadsAvailable, availableAt, markDownloadsLocked } = useDownloadAvailability()
 
   useEffect(() => {
@@ -70,15 +87,22 @@ export function GalleryGrid({ onAddMemory }: { onAddMemory: () => void }) {
   }, [filters])
 
   const query = useMemo(() => ({
-    event: filters.event === 'all' ? undefined : filters.event,
+    event: config.mode !== 'both' ? config.mode : filters.event === 'all' ? undefined : filters.event,
     type: filters.type === 'all' ? undefined : filters.type,
-  }), [filters])
+  }), [filters, config.mode])
+  const visible = useCallback((item: GalleryMedia) => config.mode === 'both' || item.event.slug === config.mode, [config.mode])
+
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false; requestSequence.current += 1 }
+  }, [])
 
   const refreshMedia = useCallback(async (mediaId: string) => {
     if (mediaRequests.current.has(mediaId)) return
     mediaRequests.current.add(mediaId)
     try {
       const fresh = await getGalleryMedia(mediaId)
+      if (!mounted.current || !visible(fresh)) return
       setItems((current) => {
         const existing = current.some((item) => item.id === fresh.id)
         const belongsInCurrentView = matchesFilters(fresh, filtersRef.current)
@@ -92,14 +116,14 @@ export function GalleryGrid({ onAddMemory }: { onAddMemory: () => void }) {
       })
       setMemoryError(false)
     } catch {
-      if (new URLSearchParams(window.location.search).get('memory') === mediaId && !itemsRef.current.some((item) => item.id === mediaId)) {
+      if (mounted.current && new URLSearchParams(window.location.search).get('memory') === mediaId && !itemsRef.current.some((item) => item.id === mediaId)) {
         setMemoryError(true)
       }
       throw new Error('Unable to refresh gallery media')
     } finally {
       mediaRequests.current.delete(mediaId)
     }
-  }, [])
+  }, [visible])
 
   const syncSelectionFromUrl = useCallback(() => {
     const requested = new URLSearchParams(window.location.search).get('memory')
@@ -126,7 +150,7 @@ export function GalleryGrid({ onAddMemory }: { onAddMemory: () => void }) {
     try {
       const page = await getGallery({ ...query, limit: GALLERY_PAGE_SIZE })
       if (sequence !== requestSequence.current) return
-      setItems((current) => mergeGalleryPage(current, page.items, false, requestedMemory.current))
+      setItems((current) => mergeGalleryPage(current.filter(visible), page.items.filter(visible), false, requestedMemory.current))
       setCursor(page.nextCursor)
       setHasLoaded(true)
     } catch {
@@ -134,7 +158,7 @@ export function GalleryGrid({ onAddMemory }: { onAddMemory: () => void }) {
     } finally {
       if (sequence === requestSequence.current) setResetLoadKind(null)
     }
-  }, [query])
+  }, [query, visible])
 
   useEffect(() => {
     const kind: Exclude<ResetLoadKind, null> = firstQuery.current ? 'initial' : 'filter'
@@ -153,7 +177,7 @@ export function GalleryGrid({ onAddMemory }: { onAddMemory: () => void }) {
     try {
       const page = await getGallery({ ...query, cursor: nextCursor, limit: GALLERY_PAGE_SIZE })
       if (sequence !== requestSequence.current) return
-      setItems((current) => mergeGalleryPage(current, page.items, true, requestedMemory.current))
+      setItems((current) => mergeGalleryPage(current.filter(visible), page.items.filter(visible), true, requestedMemory.current))
       setCursor(page.nextCursor)
     } catch {
       if (sequence === requestSequence.current) setPaginationError(true)
@@ -161,7 +185,7 @@ export function GalleryGrid({ onAddMemory }: { onAddMemory: () => void }) {
       if (paginationRequest.current === sequence) paginationRequest.current = null
       if (sequence === requestSequence.current) setPaginationLoading(false)
     }
-  }, [query])
+  }, [query, visible])
 
   useEffect(() => {
     const node = loadMoreRef.current
@@ -226,7 +250,7 @@ export function GalleryGrid({ onAddMemory }: { onAddMemory: () => void }) {
       {!downloadsAvailable && releaseDate ? (
         <p className="download-release-note"><Clock3 aria-hidden="true" size={15} />{t.downloadsOpen(releaseDate)}</p>
       ) : null}
-      <GalleryFilters value={filters} onChange={changeFilters}>
+      <GalleryFilters mode={config.mode} value={filters} onChange={changeFilters}>
         <div className="gallery-view-switch" role="group" aria-label={locale === 'en' ? 'Gallery layout' : 'Susun atur galeri'}>
           <button type="button" aria-label={locale === 'en' ? 'Journal view' : 'Paparan jurnal'} aria-pressed={view === 'journal'} onClick={() => setView('journal')}><BookOpen size={16} aria-hidden="true" /><span>{locale === 'en' ? 'Journal' : 'Jurnal'}</span></button>
           <button type="button" aria-label={locale === 'en' ? 'Grid view' : 'Paparan grid'} aria-pressed={view === 'grid'} onClick={() => setView('grid')}><LayoutGrid size={16} aria-hidden="true" /><span>Grid</span></button>

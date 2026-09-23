@@ -6,10 +6,10 @@ import { fakeEnv } from './fake'
 
 // Execute route SQL and migrations against SQLite itself, including constraints,
 // uniqueness and transactions. R2 is deliberately the existing inert fake.
-export function sqliteEnv(migrations = 3) {
+export function sqliteEnv(migrations = 4) {
   const database = new DatabaseSync(':memory:')
   const applyMigration = (name: string) => database.exec(readFileSync(resolve('worker/migrations', name), 'utf8'))
-  const names = ['0001_initial.sql', '0002_upload_requests.sql', '0003_greetings.sql']
+  const names = ['0001_initial.sql', '0002_upload_requests.sql', '0003_greetings.sql', '0004_gallery_visibility.sql']
   names.slice(0, migrations).forEach(applyMigration)
 
   class Statement {

@@ -18,20 +18,23 @@ describe('public gallery', () => {
     vi.setSystemTime('2027-08-22T16:00:00.000Z')
     let sql = ''
     const env = fakeEnv({ first: (statement) => {
+      if (!statement.includes('FROM media')) return null
       sql = statement
-      return { original_object_key:'originals/solemnisation/memory.jpg',original_filename:'Our memory.jpg' }
+      return { original_object_key:'originals/solemnisation/memory.jpg',original_filename:'Our memory.jpg',event_slug:'solemnisation' }
     } })
     const response = await galleryDownloadRoute(new Request('https://api.test/api/gallery/00000000-0000-4000-8000-000000000001/download'),env,'00000000-0000-4000-8000-000000000001')
     const body = await response.json() as { ok:true;data:{ url:string;expiresInSeconds:number } }
 
     expect(response.status).toBe(200)
     expect(response.headers.get('Cache-Control')).toBe('no-store')
-    expect(sql).toContain("m.status='approved'")
+    expect(sql).toContain("m.status = 'approved'")
     expect(sql).toContain('m.display_object_key IS NOT NULL')
     expect(body.data.expiresInSeconds).toBe(300)
     const url = new URL(body.data.url)
-    expect(url.pathname).toBe('/test-bucket/originals/solemnisation/memory.jpg')
-    expect(url.searchParams.get('response-content-disposition')).toBe('attachment; filename="Our memory.jpg"; filename*=UTF-8\'\'Our%20memory.jpg')
+    expect(url.origin).toBe('https://api.test')
+    expect(url.pathname).toBe('/api/media/00000000-0000-4000-8000-000000000001/original')
+    expect(url.searchParams.get('signature')).toMatch(/^[A-Za-z0-9_-]{43}$/)
+    expect(Number(url.searchParams.get('expires'))).toBe(Math.floor(Date.now() / 1000) + 300)
   })
 
   it('does not expose a download URL for media outside the public gallery', async () => {

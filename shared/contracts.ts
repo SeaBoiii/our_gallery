@@ -1,5 +1,35 @@
 export type Locale = 'en' | 'ms'
 export type EventSlug = 'solemnisation' | 'reception'
+export type GalleryDayMode = EventSlug | 'both'
+export type GalleryVisibilitySetting = {
+  control: 'automatic' | 'manual'
+  mode: GalleryDayMode
+  lastSingleDay: EventSlug | null
+  overrideUntil: string | null
+}
+export type AdminGalleryVisibility = GalleryVisibilitySetting & {
+  effectiveMode: GalleryDayMode
+  serverTime: string
+  nextTransitionAt: string | null
+  revision: string
+}
+export type GalleryVisibilityUpdate = { control: 'automatic' } | { control: 'manual'; mode: GalleryDayMode }
+export type PublicGalleryConfig = {
+  mode: GalleryDayMode
+  events: GalleryEvent[]
+  uploadsEnabled: boolean
+  serverTime: string
+  nextTransitionAt: string | null
+  revision: string
+  validUntil: string
+}
+export type AdminSettingsUpdate = {
+  uploadsEnabled?: boolean
+  autoApproveUploads?: boolean
+  greetingsEnabled?: boolean
+  liveWallSource?: 'all' | EventSlug
+  visibility?: GalleryVisibilityUpdate
+}
 export type MediaType = 'photo' | 'video'
 export type MediaStatus = 'uploading' | 'reconciling' | 'pending' | 'approved' | 'rejected' | 'deleting' | 'deleted' | 'expired'
 export type DerivativeStatus = 'pending' | 'ready' | 'partial' | 'unavailable' | 'not_required'
@@ -188,6 +218,7 @@ export type AdminGreetingPage = { items: AdminGreeting[]; nextCursor: string | n
 export type AdminGreetingStats = { pending: number; approved: number; rejected: number; total: number }
 
 export type GallerySettings = {
+  visibility: AdminGalleryVisibility
   uploadsEnabled: boolean
   autoApproveUploads: boolean
   greetingsEnabled?: boolean

@@ -1,6 +1,7 @@
 import type { Env } from '../src/env'
 
 type Handlers = {
+  visibility?: string | null
   first?: (sql: string, bindings: unknown[]) => unknown
   all?: (sql: string, bindings: unknown[]) => unknown[]
   run?: (sql: string, bindings: unknown[]) => { changes?: number }
@@ -11,7 +12,12 @@ export class FakeStatement {
   bindings: unknown[] = []
   constructor(public sql: string, private handlers: Handlers) {}
   bind(...values: unknown[]) { this.bindings = values; return this }
-  async first<T>() { return (this.handlers.first?.(this.sql,this.bindings) ?? null) as T | null }
+  async first<T>() {
+    if (this.sql.includes("key = 'gallery_visibility'")) {
+      return (this.handlers.visibility === null ? null : { value: this.handlers.visibility ?? '{"control":"manual","mode":"both","lastSingleDay":"solemnisation","overrideUntil":null}', updated_at: '2026-09-23T00:00:00Z' }) as T | null
+    }
+    return (this.handlers.first?.(this.sql,this.bindings) ?? null) as T | null
+  }
   async all<T>() { return { results: (this.handlers.all?.(this.sql,this.bindings) ?? []) as T[], success: true, meta: {} } as D1Result<T> }
   async run<T>() { const value = this.handlers.run?.(this.sql,this.bindings); return { success: true, results: [], meta: { changes: value?.changes ?? 1 } } as unknown as D1Result<T> }
 }

@@ -3,11 +3,13 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LocaleProvider } from '../context/LocaleContext'
+import { GalleryVisibilityContext, type GalleryVisibilityContextValue } from '../context/gallery-visibility-context'
+import type { EventSlug, PublicGalleryConfig } from '../../shared/contracts'
 import { DEFAULT_PHOTO_CROP, getBoothLayout } from '../features/polaroid/render'
 import type { BoothLayout, BoothPhoto, BoothSettings, LoadedPhoto } from '../features/polaroid/types'
 import PolaroidPage from './PolaroidPage'
 
-const engine = vi.hoisted(() => ({ load: vi.fn(), draw: vi.fn(), export: vi.fn(), pan: vi.fn(), uploads: vi.fn() }))
+const engine = vi.hoisted(() => ({ load: vi.fn(), draw: vi.fn(), export: vi.fn(), pan: vi.fn(), uploads: vi.fn(), refresh: vi.fn() }))
 vi.mock('../features/polaroid/render', async importOriginal => {
   const actual = await importOriginal<typeof import('../features/polaroid/render')>()
   return { ...actual, loadPolaroidPhoto: engine.load, drawPhotobooth: engine.draw, exportPhotobooth: engine.export, boothPositionDelta: engine.pan }
@@ -21,10 +23,10 @@ vi.mock('../features/polaroid/CameraCapture', () => ({
   ),
 }))
 vi.mock('../components/upload/UploadExperience', () => ({
-  UploadExperience: ({ open, initialFiles, onClose }: { open: boolean; initialFiles: File[]; onClose: () => void }) => {
+  UploadExperience: ({ open, initialFiles, lockedEventSlug, onClose }: { open: boolean; initialFiles: File[]; lockedEventSlug?: EventSlug; onClose: () => void }) => {
     if (!open) return null
-    engine.uploads(initialFiles)
-    return <div role="dialog" aria-label="Gallery upload"><p>{initialFiles[0]?.name}</p><button onClick={onClose}>Close gallery upload</button></div>
+    engine.uploads(initialFiles, lockedEventSlug)
+    return <div role="dialog" aria-label="Gallery upload"><p>{initialFiles[0]?.name}</p><p data-testid="locked-upload-date">{lockedEventSlug}</p><button onClick={onClose}>Close gallery upload</button></div>
   },
 }))
 
@@ -36,10 +38,27 @@ const drawnSettings = () => engine.draw.mock.lastCall![2] as BoothSettings
 const savedPhotos = () => engine.export.mock.lastCall![0] as BoothPhoto[]
 const ready = () => waitFor(() => expect(screen.getByRole('button', { name: 'Save PNG' })).toBeEnabled())
 
-function setup() {
+function policy(mode: PublicGalleryConfig['mode'] = 'solemnisation', revision = 'revision-1'): PublicGalleryConfig {
+  const events = (['solemnisation', 'reception'] as const).filter(slug => mode === 'both' || slug === mode).map(slug => ({
+    id: `event-${slug}`, slug, name: slug, eventDate: slug === 'solemnisation' ? '2027-08-21' : '2027-08-22', displayName: slug, uploadEnabled: true,
+  }))
+  return { mode, revision, events, uploadsEnabled: true, serverTime: '2027-08-21T00:00:00.000Z', validUntil: '2027-08-21T00:00:30.000Z', nextTransitionAt: null }
+}
+
+function setup(initialConfig: PublicGalleryConfig | null = policy()) {
   const user = userEvent.setup()
-  const view = render(<LocaleProvider><MemoryRouter initialEntries={['/photobooth']}><PolaroidPage /></MemoryRouter></LocaleProvider>)
-  return { user, ...view }
+  let config = initialConfig
+  let status: GalleryVisibilityContextValue['status'] = config ? 'ready' : 'loading'
+  engine.refresh.mockImplementation(async () => {
+    if (!config || status !== 'ready') throw new Error('Visibility unavailable')
+    return config
+  })
+  const tree = () => <LocaleProvider><GalleryVisibilityContext.Provider value={{ config, status, refresh: engine.refresh }}><MemoryRouter initialEntries={['/photobooth']}><PolaroidPage /></MemoryRouter></GalleryVisibilityContext.Provider></LocaleProvider>
+  const view = render(tree())
+  const changeVisibility = (next: PublicGalleryConfig | null, nextStatus: GalleryVisibilityContextValue['status'] = next ? 'ready' : 'error') => {
+    config = next; status = nextStatus; view.rerender(tree())
+  }
+  return { user, ...view, changeVisibility }
 }
 
 function deferred<T>() {
@@ -100,13 +119,14 @@ describe('Wedding photo booth', () => {
   })
 
   it('preserves the order of four uploaded photos and sends the composed PNG to the gallery only when requested', async () => {
-    const { user } = setup()
+    const { user, changeVisibility } = setup()
     const { photos, files } = await fillFour(user)
     expect(engine.load.mock.calls.map(([input]) => input)).toEqual(files)
     expect(drawnPhotos().map(entry => entry?.photo)).toEqual(photos)
     await user.click(screen.getByRole('button', { name: 'Love, airmail' }))
     await user.type(screen.getByLabelText(/A little caption/), 'Our favourite adventure')
-    await user.selectOptions(screen.getByLabelText('The celebration'), 'reception')
+    changeVisibility(policy('both'))
+    await user.selectOptions(screen.getByLabelText('Wedding date'), 'reception')
     await user.click(screen.getByRole('button', { name: 'Black & white' }))
     fireEvent.change(screen.getByRole('slider', { name: 'Zoom' }), { target: { value: '1.5' } })
     await ready()
@@ -405,5 +425,154 @@ describe('Wedding photo booth', () => {
     expect(engine.export.mock.lastCall![1]).toMatchObject({ layout: 'strip', frame: 'ivory' })
     expect(engine.uploads).not.toHaveBeenCalled()
     expect(screen.queryByRole('dialog', { name: 'Gallery upload' })).not.toBeInTheDocument()
+  })
+
+  it('requires one explicit date in both-day mode and never offers a combined print date', async () => {
+    const { user } = setup(policy('both'))
+    const photos = queuePhotos()
+    await user.upload(chooser(), Array.from({ length: 4 }, (_, index) => file(`both-days-${index}.jpg`)))
+    await screen.findByRole('button', { name: 'Photo 4' })
+    const date = screen.getByRole('combobox', { name: 'Wedding date' })
+
+    expect(date).toHaveValue('')
+    expect(within(date).getAllByRole('option').map(option => (option as HTMLOptionElement).value)).toEqual(['', 'solemnisation', 'reception'])
+    expect(screen.getByRole('button', { name: 'Save PNG' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Add to gallery' })).toBeDisabled()
+    expect(screen.getByText('Choose a date for your keepsake before saving.')).toBeVisible()
+    expect(engine.export).not.toHaveBeenCalled()
+    await user.selectOptions(date, 'reception')
+    await ready()
+    await user.click(screen.getByRole('button', { name: 'Save PNG' }))
+
+    expect(await screen.findByText('Your keepsake is ready. Check your downloads.')).toBeVisible()
+    expect(engine.export.mock.lastCall![1].celebration).toBe('reception')
+    expect(savedPhotos().map(entry => entry.photo)).toEqual(photos)
+    expect(engine.refresh).toHaveBeenCalledTimes(2)
+  })
+
+  it('shows only the active date in single-day mode and preserves a chosen date and all edits across visibility changes', async () => {
+    const { user, changeVisibility, container } = setup(policy('both'))
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Wedding date' }), 'reception')
+    const { photos } = await fillFour(user)
+    await user.type(screen.getByLabelText(/A little caption/), 'Forever')
+    await user.click(screen.getByRole('button', { name: 'Photo 3' }))
+    fireEvent.change(screen.getByRole('slider', { name: 'Zoom' }), { target: { value: '1.8' } })
+    changeVisibility(policy('solemnisation', 'revision-2'))
+    await ready()
+
+    expect(screen.queryByRole('combobox', { name: 'Wedding date' })).not.toBeInTheDocument()
+    expect(container.querySelector('.studio-intro .eyebrow')).toHaveTextContent('21 August 2027')
+    expect(container.querySelector('.studio-intro .eyebrow')).not.toHaveTextContent('22 August')
+    expect(drawnSettings().celebration).toBe('solemnisation')
+    expect(screen.getByLabelText(/A little caption/)).toHaveValue('Forever')
+    expect(screen.getByRole('slider', { name: 'Zoom' })).toHaveValue('1.8')
+    changeVisibility(policy('both', 'revision-3'))
+    await ready()
+
+    expect(screen.getByRole('combobox', { name: 'Wedding date' })).toHaveValue('solemnisation')
+    expect(drawnSettings().celebration).toBe('solemnisation')
+    expect(drawnPhotos().map(entry => entry?.photo)).toEqual(photos)
+    expect(drawnPhotos()[2]?.crop.zoom).toBe(1.8)
+    photos.forEach(photo => expect(photo.dispose).not.toHaveBeenCalled())
+  })
+
+  it('preserves an automatically assigned 22 August date through temporary policy loss and a later both-day policy', async () => {
+    const { user, changeVisibility } = setup(policy('reception'))
+    const { photos } = await fillFour(user)
+    expect(drawnSettings().celebration).toBe('reception')
+    changeVisibility(null, 'loading')
+    expect(screen.getByRole('button', { name: 'Save PNG' })).toBeDisabled()
+    changeVisibility(policy('both', 'revision-2'))
+    await ready()
+
+    expect(screen.getByRole('combobox', { name: 'Wedding date' })).toHaveValue('reception')
+    expect(drawnSettings().celebration).toBe('reception')
+    expect(drawnPhotos().map(entry => entry?.photo)).toEqual(photos)
+    photos.forEach(photo => expect(photo.dispose).not.toHaveBeenCalled())
+  })
+
+  it('waits for a fresh date policy before rendering and rejects a date that changed during the preflight', async () => {
+    const pending = deferred<PublicGalleryConfig>()
+    const { user, changeVisibility } = setup()
+    const { photos } = await fillFour(user)
+    await user.type(screen.getByLabelText(/A little caption/), 'Our keepsake')
+    await ready()
+    engine.refresh.mockReturnValueOnce(pending.promise)
+    await user.click(screen.getByRole('button', { name: 'Save PNG' }))
+    expect(engine.export).not.toHaveBeenCalled()
+    const changed = policy('reception', 'revision-2')
+    await act(async () => { changeVisibility(changed); pending.resolve(changed) })
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('The available wedding date changed')
+    expect(engine.export).not.toHaveBeenCalled()
+    expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled()
+    expect(screen.getByLabelText(/A little caption/)).toHaveValue('Our keepsake')
+    expect(drawnPhotos().map(entry => entry?.photo)).toEqual(photos)
+    photos.forEach(photo => expect(photo.dispose).not.toHaveBeenCalled())
+  })
+
+  it.each(['preflight', 'postflight'])('keeps the entire draft and rejects the print when the %s date check fails', async phase => {
+    const { user, changeVisibility } = setup()
+    const { photos } = await fillFour(user)
+    await user.type(screen.getByLabelText(/A little caption/), 'Safe on this device')
+    fireEvent.change(screen.getByRole('slider', { name: 'Zoom' }), { target: { value: '1.6' } })
+    await ready()
+    if (phase === 'postflight') engine.refresh.mockResolvedValueOnce(policy())
+    engine.refresh.mockImplementationOnce(async () => { changeVisibility(null, 'error'); throw new Error('Offline') })
+    await user.click(screen.getByRole('button', { name: 'Save PNG' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Your photos and edits are safe')
+    expect(engine.export).toHaveBeenCalledTimes(phase === 'preflight' ? 0 : 1)
+    expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled()
+    expect(engine.uploads).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Save PNG' })).toBeDisabled()
+    expect(screen.getByLabelText(/A little caption/)).toHaveValue('Safe on this device')
+    expect(screen.getByRole('slider', { name: 'Zoom' })).toHaveValue('1.6')
+    expect(drawnPhotos().map(entry => entry?.photo)).toEqual(photos)
+    photos.forEach(photo => expect(photo.dispose).not.toHaveBeenCalled())
+    changeVisibility(policy('solemnisation', 'revision-2'))
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+    await ready()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it.each([
+    { destination: 'Save PNG', nextMode: 'solemnisation' as const },
+    { destination: 'Add to gallery', nextMode: 'reception' as const },
+  ])('discards a finished $destination export when the policy revision changes during rendering', async ({ destination, nextMode }) => {
+    const pending = deferred<Blob>()
+    const { user, changeVisibility } = setup()
+    const { photos } = await fillFour(user)
+    engine.export.mockReturnValueOnce(pending.promise)
+    await user.click(screen.getByRole('button', { name: destination }))
+    expect(engine.export).toHaveBeenCalledOnce()
+    changeVisibility(policy(nextMode, 'revision-2'))
+    await act(async () => { pending.resolve(new Blob(['stale print'], { type: 'image/png' })) })
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('The available wedding date changed')
+    expect(engine.refresh).toHaveBeenCalledTimes(2)
+    expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled()
+    expect(URL.createObjectURL).not.toHaveBeenCalled()
+    expect(engine.uploads).not.toHaveBeenCalled()
+    expect(drawnPhotos().map(entry => entry?.photo)).toEqual(photos)
+    photos.forEach(photo => expect(photo.dispose).not.toHaveBeenCalled())
+  })
+
+  it('locks the gallery upload to the date burned into its PNG even if the editor date changes later', async () => {
+    const { user, changeVisibility } = setup(policy('both'))
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Wedding date' }), 'reception')
+    const { photos } = await fillFour(user)
+    await user.click(screen.getByRole('button', { name: 'Add to gallery' }))
+
+    expect(await screen.findByRole('dialog', { name: 'Gallery upload' })).toBeVisible()
+    expect(screen.getByTestId('locked-upload-date')).toHaveTextContent('reception')
+    expect(engine.export.mock.lastCall![1].celebration).toBe('reception')
+    changeVisibility(policy('solemnisation', 'revision-2'))
+    await waitFor(() => expect(drawnSettings().celebration).toBe('solemnisation'))
+
+    expect(screen.getByTestId('locked-upload-date')).toHaveTextContent('reception')
+    expect(engine.uploads.mock.lastCall![1]).toBe('reception')
+    expect(engine.export).toHaveBeenCalledOnce()
+    photos.forEach(photo => expect(photo.dispose).not.toHaveBeenCalled())
   })
 })

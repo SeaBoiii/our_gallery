@@ -80,6 +80,9 @@
 .studio-reorder { display: flex; justify-content: space-between; border-top: 1px dashed #d2ccbe; }
 .studio-reorder button { color: #647067; font-size: .62rem; }
 .studio-export .studio-completion-note { color: #816738; }
+.studio-date-status { color: #657068; font-size: .68rem; line-height: 1.6; }
+.studio-fixed-date { display: flex; justify-content: space-between; gap: 12px; margin: 18px 0 0; color: #657068; font-size: .7rem; line-height: 1.6; }
+.studio-fixed-date strong { color: var(--ink); font-weight: 500; }
 .camera-session-progress { margin: 17px 0 0; }
 .camera-progress { margin: 0 0 12px; color: var(--muted); text-align: center; font: .7rem/1.5 var(--mono); }
 .camera-shot-indicators { display: flex; justify-content: center; gap: 10px; margin: 0; padding: 0; list-style: none; }

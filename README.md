@@ -9,7 +9,7 @@ The frontend is static React + Vite on GitHub Pages. The API is a Cloudflare Wor
 
 The gallery uses the current Our Flight design language: navy, ivory and gold, the original A/N monogram, and locally hosted Instrument Serif (license in `public/fonts/`). `/` and `/gallery` show the photo and video journal. Media sharing has two input steps: choose files, then confirm the celebration and optional guest details.
 
-Albums retain their stable IDs: `solemnisation` is **21 August — Nikah & Bride’s Reception**, and `reception` is **22 August — Groom’s Reception**. Existing uploads and captions keep their associations.
+Albums retain their stable IDs: `solemnisation` is **21 August** and `reception` is **22 August**. Both use **Our Wedding / Perkahwinan Kami**. Existing uploads and captions keep their associations.
 
 ### Retired standalone greetings
 
@@ -21,7 +21,7 @@ Media uploads continue to use Turnstile action `upload_prepare`, with the existi
 
 ### Release order
 
-Run lint, the full test suite, frontend build and Worker dry-run build. Apply any pending additive D1 migrations and deploy the Worker first; verify gallery reads, media uploads and the `410` responses from the retired public greeting endpoints with the configured Origin before releasing the frontend. Keep historical database tables and media when rolling back an application version.
+Run lint, the full test suite, frontend build and Worker dry-run build. Apply any pending additive D1 migrations and deploy the Worker first; verify gallery reads, media uploads and the `410` responses from the retired public greeting endpoints with the configured Origin before releasing the frontend. Keep historical database tables and media when rolling back an application version. Retain the policy-enforcing Worker and migration; never restore an unrestricted public API.
 
 Migration and route tests run against real in-memory SQLite using Node 24’s `node:sqlite`. Browser visual review and a rehearsal on guests’ actual devices remain useful before the wedding.
 
@@ -32,7 +32,7 @@ flowchart TD
   Guest[Guest phone browser] -->|HTTPS| Pages[GitHub Pages\ngallery.aleemxnurul.love]
   Pages -->|prepare / complete / gallery| Worker[Cloudflare Worker\ngallery-api.aleemxnurul.love]
   Worker -->|metadata, moderation, rate limits| D1[(Cloudflare D1)]
-  Worker -->|short-lived signed PUT / GET| R2[(Private Cloudflare R2)]
+  Worker -->|private reads and short-lived upload signatures| R2[(Private Cloudflare R2)]
   Guest -->|direct signed PUT\nstaging objects only| R2
   R2 -->|HEAD + magic-byte verification| Worker
   Admin[Admin browser] -->|HttpOnly HMAC session| Worker
@@ -48,17 +48,19 @@ Uploads never send large media bytes through Worker memory. The Worker validates
 - JPEG, PNG, WebP, HEIC/HEIF, MP4, MOV, and WebM admission checks.
 - Original-preserving browser derivatives: ~1800 px WebP display and 480 px WebP thumbnail.
 - Per-file and overall upload progress, partial-failure recovery, and individual retry.
-- Singapore-time event defaulting for 21 and 22 August 2027.
+- Shared Singapore-time day visibility with audited admin overrides; automatic access switches on 22 and 23 August 2027.
 - SHA-256 duplicate fingerprints scoped to the same browser and event.
 - Approved-only paginated gallery, filters, lazy thumbnails, lightbox, keyboard/swipe navigation, sharing, and original-file downloads that unlock automatically after the wedding through five-minute signed URLs.
 - English and Bahasa Melayu guest interface with local preference storage.
 - `/live` polling wall with non-repeating rotation, preloading, muted video, filters, QR, and fullscreen mode.
 - `/qr` high-contrast printable boarding card.
-- `/admin` password login, HMAC-signed HttpOnly session, statistics, storage breakdown, moderation, event switches, auto-approval, and live-wall controls.
+- `/admin` password login, HMAC-signed HttpOnly session, statistics, storage breakdown, moderation, shared date visibility, auto-approval, and live-wall controls.
 - Private R2, exact-origin CORS, Turnstile, hashed IP/session rate limits, post-upload verification, and scheduled stale-upload cleanup.
 - D1 migrations, GitHub Pages and Worker workflows, generated non-copyrighted preview artwork, and automated frontend/Worker tests.
 
 Generation provenance, saved paths, and the exact image prompt are recorded in [`docs/IMAGE_ASSETS.md`](docs/IMAGE_ASSETS.md).
+
+The shared date policy, deployment order and rollback requirements are documented in [`docs/DAY_VISIBILITY_RELEASE.md`](docs/DAY_VISIBILITY_RELEASE.md). Dedicated strip artwork and the date-free social card have their prompts in [`docs/DAY_VISIBILITY_ASSETS.md`](docs/DAY_VISIBILITY_ASSETS.md).
 
 ## Repository map
 
@@ -375,14 +377,14 @@ The test suite covers Singapore date selection, upload queue success/failure/ret
 ## Security and privacy notes
 
 - The site sends `noindex,nofollow` and `robots.txt` disallows crawling.
-- R2 remains private; gallery responses contain short-lived signed GET URLs only for approved records.
+- R2 remains private. Public images, video playback and short-lived original downloads use Worker URLs that check approval and the current visible date before returning bytes, HEAD metadata or conditional responses.
 - Presigned URLs are bearer credentials. They are never stored in D1 or deliberately logged.
 - `Content-Type` and `If-None-Match: *` are both cryptographically signed; a staged PUT cannot change type or overwrite an existing key.
 - PUT authority is limited to an `uploading` row, rate-limited, and capped to a 30-minute total authorization window. Deleted or terminal rows cannot mint another PUT URL.
 - A new prepare operation atomically claims its request ID in D1 before Turnstile verification. Turnstile tokens remain single-use and no browser-controlled value is used as a Siteverify idempotency key.
 - Valid staged media is promoted to never-signed final keys with source/destination copy preconditions. Cron re-purges staging after URL expiry, and the one-day prefix lifecycle is a second safety net.
 - Claimed file size is checked before signing; authoritative size, content type, and file signature are checked after R2 receives the object. R2 cannot enforce the 25/250 MB browser declaration before ingest, so short URL lifetimes, Turnstile, and rate limits mitigate—but cannot entirely eliminate—oversized bearer-URL abuse.
-- Deleting or rejecting a memory removes it from APIs immediately. A signed GET URL already issued can remain valid until its short expiry.
+- Deleting, rejecting or hiding a memory blocks subsequent public API and media requests. Already viewed, buffered, saved or printed material cannot be recalled. Authenticated admin previews remain separate.
 - Admin cookies are host-only, HttpOnly, Secure, SameSite=Strict, HMAC-signed, D1-revocable, and sent only with credentialed API requests.
 - Mutating endpoints require the exact configured Origin; production never uses wildcard CORS.
 - No guest accounts, analytics, advertisements, social login, or public R2 directory are included.

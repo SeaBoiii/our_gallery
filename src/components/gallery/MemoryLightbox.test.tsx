@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useState, type ComponentProps } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GalleryMedia } from '../../../shared/contracts'
@@ -84,6 +84,17 @@ describe('MemoryLightbox', () => {
     await waitFor(() => expect(clickedUrl).toBe('https://downloads.test/original.jpg?signature=test'))
     expect(await screen.findByText('Your original download is starting.')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Download original' })).not.toBeDisabled()
+  })
+
+  it('does not start a late download after the lightbox was removed by a policy change', async () => {
+    let resolve!: (result: { url: string; expiresInSeconds: number }) => void
+    api.getMediaDownload.mockReturnValue(new Promise(done => { resolve = done }))
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+    const view = renderLightbox()
+    fireEvent.click(screen.getByRole('button', { name: 'Download original' }))
+    view.unmount()
+    await act(async () => resolve({ url: 'https://downloads.test/hidden.jpg', expiresInSeconds: 30 }))
+    expect(click).not.toHaveBeenCalled()
   })
 
   it('immediately hides downloads when the server says the release is locked', async () => {

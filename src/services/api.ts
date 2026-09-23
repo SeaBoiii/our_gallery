@@ -4,6 +4,7 @@ import type {
   AdminMediaPage,
   AdminSession,
   AdminStats,
+  AdminSettingsUpdate,
   ApiEnvelope,
   CompleteUploadRequest,
   CompleteUploadResponse,
@@ -15,6 +16,7 @@ import type {
   GalleryDownloadStatus,
   GalleryPage,
   GallerySettings,
+  PublicGalleryConfig,
   GreetingPage,
   GreetingStatus,
   MediaStatus,
@@ -23,11 +25,12 @@ import type {
   UploadRefreshResponse,
 } from '../../shared/contracts'
 import { API_BASE_URL, USE_MOCK_DATA } from '../config'
-import { mockAdminMedia, mockAdminStats, mockEvents, mockGallery, mockSettings } from '../data/mock'
+import { mockAdminMedia, mockAdminStats, mockGallery, mockSettings } from '../data/mock'
 import { developmentGreetings, MockGreetingError } from '../data/greetings'
+import { applyGalleryVisibilityUpdate, PUBLIC_CONFIG_MAX_AGE_MS, resolveGalleryVisibility, visibleEventSlugs } from '../../shared/visibility'
 
 let developmentSettings: GallerySettings = { ...mockSettings, greetingsEnabled: true, events: mockSettings.events.map((event) => ({ ...event })) }
-const developmentSettingsSnapshot = () => ({ ...developmentSettings, events: developmentSettings.events.map((event) => ({ ...event })) })
+const developmentSettingsSnapshot = () => ({ ...developmentSettings, visibility: resolveGalleryVisibility(developmentSettings.visibility), events: developmentSettings.events.map((event) => ({ ...event, uploadEnabled: developmentSettings.uploadsEnabled })) })
 const mockDownloadsAvailableAt = '2027-08-23T00:00:00+08:00'
 export const ADMIN_SESSION_EXPIRED_EVENT = 'gallery-admin-session-expired'
 
@@ -93,13 +96,33 @@ async function request<T>(path: string, init: RequestInit = {}, retries = 0): Pr
 const json = (value: unknown): RequestInit => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) })
 
 export async function getEvents(): Promise<GalleryEvent[]> {
-  if (USE_MOCK_DATA) return mockEvents
+  if (USE_MOCK_DATA) return (await getGalleryConfig()).events
   return request('/api/events', {}, 2)
+}
+
+export async function getGalleryConfig(): Promise<PublicGalleryConfig> {
+  if (USE_MOCK_DATA) {
+    const now = Date.now()
+    const visibility = resolveGalleryVisibility(developmentSettings.visibility, now)
+    const days = visibleEventSlugs(visibility.effectiveMode)
+    return {
+      mode: visibility.effectiveMode,
+      events: developmentSettings.events.filter(event => days.includes(event.slug)).map(event => ({ ...event, uploadEnabled: developmentSettings.uploadsEnabled })),
+      uploadsEnabled: developmentSettings.uploadsEnabled,
+      serverTime: visibility.serverTime,
+      nextTransitionAt: visibility.nextTransitionAt,
+      revision: `${visibility.revision}|uploads:${developmentSettings.uploadsEnabled}`,
+      validUntil: new Date(Math.min(now + PUBLIC_CONFIG_MAX_AGE_MS, visibility.nextTransitionAt ? Date.parse(visibility.nextTransitionAt) : Infinity)).toISOString(),
+    }
+  }
+  return request('/api/gallery/config', { cache: 'no-store', signal: AbortSignal.timeout(10_000) })
 }
 
 export async function getGallery(params: { event?: EventSlug; type?: 'photo' | 'video'; cursor?: string; limit?: number } = {}): Promise<GalleryPage> {
   if (USE_MOCK_DATA) {
-    const items = mockGallery.filter((item) => (!params.event || item.event.slug === params.event) && (!params.type || item.mediaType === params.type))
+    const config = await getGalleryConfig()
+    const days = visibleEventSlugs(config.mode)
+    const items = mockGallery.filter((item) => days.includes(item.event.slug) && (!params.event || item.event.slug === params.event) && (!params.type || item.mediaType === params.type))
     return { items, nextCursor: null }
   }
   const query = new URLSearchParams()
@@ -113,7 +136,8 @@ export async function getGallery(params: { event?: EventSlug; type?: 'photo' | '
 export async function getGalleryMedia(mediaId: string) {
   if (USE_MOCK_DATA) {
     const item = mockGallery.find((candidate) => candidate.id === mediaId)
-    if (!item) throw new GalleryApiError('This memory could not be found.', 'MEDIA_NOT_FOUND')
+    const config = await getGalleryConfig()
+    if (!item || !visibleEventSlugs(config.mode).includes(item.event.slug)) throw new GalleryApiError('This memory could not be found.', 'MEDIA_NOT_FOUND')
     return item
   }
   return request<GalleryPage['items'][number]>(`/api/gallery/${encodeURIComponent(mediaId)}`, {}, 2)
@@ -133,20 +157,25 @@ export async function getGalleryDownloadStatus(): Promise<GalleryDownloadStatus>
 
 export async function getMediaDownload(mediaId: string): Promise<GalleryDownloadResponse> {
   if (USE_MOCK_DATA) {
-    const item = mockGallery.find((candidate) => candidate.id === mediaId)
-    if (!item) throw new GalleryApiError('This memory could not be found.', 'MEDIA_NOT_FOUND')
+    const item = await getGalleryMedia(mediaId)
     return { url: item.displayUrl, expiresInSeconds: 300 }
   }
   return request(`/api/gallery/${encodeURIComponent(mediaId)}/download`, {}, 1)
 }
 
 export async function getLiveConfig(): Promise<{ source: 'all' | EventSlug }> {
-  if (USE_MOCK_DATA) return { source: developmentSettings.liveWallSource }
+  if (USE_MOCK_DATA) {
+    const config = await getGalleryConfig()
+    return { source: config.mode === 'both' ? developmentSettings.liveWallSource : config.mode }
+  }
   return request('/api/live/config',{},2)
 }
 
 export async function prepareUploads(payload: PrepareUploadRequest): Promise<PrepareUploadResponse> {
   if (USE_MOCK_DATA) {
+    const config = await getGalleryConfig()
+    if (!config.uploadsEnabled) throw new GalleryApiError('Uploads are currently closed.', 'UPLOADS_CLOSED')
+    if (!visibleEventSlugs(config.mode).includes(payload.eventSlug)) throw new GalleryApiError('This date is no longer available. Your photos are still here.', 'EVENT_NOT_VISIBLE')
     return {
       uploads: payload.files.map((file) => {
         const target = { url: 'mock://upload', requiredHeaders: {}, expiresAt: new Date(Date.now() + 600_000).toISOString() }
@@ -210,7 +239,7 @@ export async function getAdminSettings(): Promise<GallerySettings> {
   return request('/api/admin/settings')
 }
 
-export async function updateAdminSettings(settings: Partial<Omit<GallerySettings, 'events'>> & { event?: { slug: EventSlug; uploadEnabled: boolean } }) {
+export async function updateAdminSettings(settings: AdminSettingsUpdate): Promise<GallerySettings> {
   if (USE_MOCK_DATA) {
     developmentSettings = {
       ...developmentSettings,
@@ -218,9 +247,7 @@ export async function updateAdminSettings(settings: Partial<Omit<GallerySettings
       ...(typeof settings.autoApproveUploads === 'boolean' ? { autoApproveUploads: settings.autoApproveUploads } : {}),
       ...(typeof settings.greetingsEnabled === 'boolean' ? { greetingsEnabled: settings.greetingsEnabled } : {}),
       ...(settings.liveWallSource ? { liveWallSource: settings.liveWallSource } : {}),
-      events: settings.event
-        ? developmentSettings.events.map((event) => event.slug === settings.event!.slug ? { ...event, uploadEnabled: settings.event!.uploadEnabled } : event)
-        : developmentSettings.events,
+      ...(settings.visibility ? { visibility: resolveGalleryVisibility(applyGalleryVisibilityUpdate(developmentSettings.visibility, settings.visibility)) } : {}),
     }
     return developmentSettingsSnapshot()
   }

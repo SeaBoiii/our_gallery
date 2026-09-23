@@ -1,11 +1,15 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CompleteUploadResponse, GalleryEvent, PrepareUploadRequest, PrepareUploadResponse } from '../../../shared/contracts'
+import type { CompleteUploadResponse, EventSlug, GalleryEvent, PrepareUploadRequest, PrepareUploadResponse, PublicGalleryConfig } from '../../../shared/contracts'
 import { LocaleProvider } from '../../context/LocaleContext'
 import { copy } from '../../i18n/copy'
-import { GalleryApiError, getEvents, prepareUploads } from '../../services/api'
+import { GalleryApiError, prepareUploads } from '../../services/api'
+import { createImageDerivatives } from '../../utils/files'
 import { UploadTransferError, uploadQueueItem } from '../../services/upload'
 import { UploadExperience } from './UploadExperience'
+
+const visibility = vi.hoisted(() => ({ config: null as PublicGalleryConfig | null, status: 'ready' as 'ready' | 'loading' | 'error', refresh: vi.fn<() => Promise<PublicGalleryConfig>>() }))
+vi.mock('../../context/useGalleryVisibility', () => ({ useGalleryVisibility: () => visibility }))
 
 vi.mock('../../config', async (importOriginal) => ({
   ...await importOriginal<typeof import('../../config')>(),
@@ -15,7 +19,6 @@ vi.mock('../../config', async (importOriginal) => ({
 
 vi.mock('../../services/api', async (importOriginal) => ({
   ...await importOriginal<typeof import('../../services/api')>(),
-  getEvents: vi.fn(),
   prepareUploads: vi.fn(),
 }))
 
@@ -35,6 +38,10 @@ const events: GalleryEvent[] = [
   { id: 'day-one', slug: 'solemnisation', name: 'solemnisation', eventDate: '2027-08-21', displayName: "Nikah & Bride's Reception", uploadEnabled: true },
   { id: 'day-two', slug: 'reception', name: 'reception', eventDate: '2027-08-22', displayName: "Groom's Reception", uploadEnabled: true },
 ]
+
+function configuration(mode: 'both' | EventSlug = 'both'): PublicGalleryConfig {
+  return { mode, events: events.filter(event => mode === 'both' || event.slug === mode), uploadsEnabled: true, serverTime: new Date().toISOString(), nextTransitionAt: null, revision: mode, validUntil: new Date(Date.now() + 30_000).toISOString() }
+}
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -62,11 +69,11 @@ function verify(token = 'verified-token') {
   act(() => { (options.callback as (token: string) => void)(token) })
 }
 
-function mount(files: File[] = []) {
-  const props = { open: true, initialFiles: files, onClose: vi.fn(), onViewGallery: vi.fn() }
+function mount(files: File[] = [], lockedEventSlug?: EventSlug) {
+  const props = { open: true, initialFiles: files, onClose: vi.fn(), onViewGallery: vi.fn(), lockedEventSlug }
   const tree = (open = true) => <LocaleProvider><UploadExperience {...props} open={open} /></LocaleProvider>
   const result = render(tree())
-  return { ...result, ...props, reopen: () => result.rerender(tree()), hide: () => result.rerender(tree(false)) }
+  return { ...result, ...props, reopen: (nextFiles?: File[]) => { if (nextFiles) props.initialFiles = nextFiles; result.rerender(tree()) }, hide: () => result.rerender(tree(false)) }
 }
 
 async function details() {
@@ -85,7 +92,10 @@ async function send() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.mocked(getEvents).mockResolvedValue(events)
+  visibility.config = configuration()
+  visibility.status = 'ready'
+  visibility.refresh.mockResolvedValue(visibility.config)
+  vi.mocked(createImageDerivatives).mockResolvedValue([])
   vi.mocked(prepareUploads).mockImplementation(async (payload) => prepared(payload))
   vi.mocked(uploadQueueItem).mockImplementation(async (item, onProgress) => { onProgress(100); return received(item.prepared?.mediaId) })
   widgets = []
@@ -181,6 +191,70 @@ describe('two-stage memory submission', () => {
     expect(vi.mocked(uploadQueueItem).mock.calls.filter(([item]) => item.file.name === 'long-video.mp4')).toHaveLength(1)
   })
 
+  it.each(['one', 'all'] as const)('prepares new selections after retrying %s from a reopened partial batch across a date change', async (retryMode) => {
+    vi.mocked(uploadQueueItem).mockImplementation(async (item, onProgress, options) => {
+      if (item.file.name === 'retry.jpg' && !options?.refreshBeforeUpload) throw new UploadTransferError('NETWORK_INTERRUPTED', 'Connection dropped')
+      onProgress(100)
+      return received(item.prepared?.mediaId)
+    })
+    visibility.config = configuration('solemnisation')
+    visibility.refresh.mockResolvedValue(visibility.config)
+    const view = mount([photo('complete.jpg'), photo('retry.jpg')])
+    await details()
+    fireEvent.change(screen.getByPlaceholderText(t.namePlaceholder), { target: { value: 'Mariam' } })
+    await send()
+    await screen.findByRole('button', { name: t.retry })
+    fireEvent.click(screen.getByRole('button', { name: t.close }))
+    view.hide()
+    visibility.config = configuration('reception')
+    visibility.refresh.mockResolvedValue(visibility.config)
+    view.reopen([photo('new-selection.jpg')])
+    await screen.findByText('new-selection.jpg')
+    expect(screen.getByRole('heading', { name: t.checkingIn })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: t.success })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: retryMode === 'one' ? `${t.retryFile} retry.jpg` : t.retry }))
+    await screen.findByRole('heading', { name: t.sharing })
+    expect(screen.queryByRole('heading', { name: t.success })).not.toBeInTheDocument()
+    expect(screen.getByPlaceholderText(t.namePlaceholder)).toHaveValue('Mariam')
+    expect(screen.getByRole('button', { name: t.startUpload })).toBeDisabled()
+    expect(prepareUploads).toHaveBeenCalledOnce()
+    expect(vi.mocked(uploadQueueItem).mock.calls[2][0].prepared).toEqual(vi.mocked(uploadQueueItem).mock.calls[1][0].prepared)
+    await waitFor(() => expect(widgets).toHaveLength(2))
+    verify('new-batch-token')
+    fireEvent.click(screen.getByRole('button', { name: t.startUpload }))
+    await screen.findByRole('heading', { name: t.success })
+    const [first, second] = vi.mocked(prepareUploads).mock.calls.map(([payload]) => payload)
+    expect(first.eventSlug).toBe('solemnisation')
+    expect(second.eventSlug).toBe('reception')
+    expect(second.requestId).not.toBe(first.requestId)
+    expect(second.turnstileToken).toBe('new-batch-token')
+    expect(second.files.map(file => file.filename)).toEqual(['new-selection.jpg'])
+    expect(vi.mocked(uploadQueueItem).mock.calls.map(([item]) => item.file.name)).toEqual(['complete.jpg', 'retry.jpg', 'retry.jpg', 'new-selection.jpg'])
+    expect(document.querySelector('.success-ticket')).toHaveTextContent('3')
+  })
+
+  it('retains selections arriving while preparation is pending and prepares them separately', async () => {
+    const preparation = deferred<PrepareUploadResponse>()
+    vi.mocked(prepareUploads).mockReturnValueOnce(preparation.promise)
+    const view = mount([photo('first.jpg')])
+    await details()
+    await send()
+    await waitFor(() => expect(prepareUploads).toHaveBeenCalledOnce())
+    const first = vi.mocked(prepareUploads).mock.calls[0][0]
+    view.reopen([photo('later.jpg')])
+    await screen.findByText('later.jpg')
+    await act(async () => { preparation.resolve(prepared(first)); await preparation.promise })
+    await screen.findByRole('heading', { name: t.sharing })
+    expect(screen.queryByRole('heading', { name: t.success })).not.toBeInTheDocument()
+    expect(uploadQueueItem).toHaveBeenCalledOnce()
+    await waitFor(() => expect(widgets).toHaveLength(2))
+    await send()
+    await screen.findByRole('heading', { name: t.success })
+    expect(vi.mocked(prepareUploads).mock.calls[1][0].files.map(file => file.filename)).toEqual(['later.jpg'])
+    expect(vi.mocked(uploadQueueItem).mock.calls.map(([item]) => item.file.name)).toEqual(['first.jpg', 'later.jpg'])
+    expect(document.querySelector('.success-ticket')).toHaveTextContent('2')
+  })
+
   it('preserves files after a failed preparation and uses a fresh request ID when details change', async () => {
     vi.mocked(prepareUploads).mockRejectedValueOnce(new GalleryApiError('Could not connect', 'NETWORK_ERROR', true))
     mount([photo('kept.jpg')])
@@ -191,7 +265,7 @@ describe('two-stage memory submission', () => {
     expect(screen.getByRole('heading', { name: t.sharing })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: t.startUpload })).toBeDisabled()
     expect(uploadQueueItem).not.toHaveBeenCalled()
-    expect(widgets).toHaveLength(2)
+    await waitFor(() => expect(widgets).toHaveLength(2))
     const first = vi.mocked(prepareUploads).mock.calls[0][0]
     fireEvent.click(screen.getByRole('button', { name: t.back }))
     expect(screen.getByText('kept.jpg')).toBeInTheDocument()
@@ -286,5 +360,95 @@ describe('two-stage memory submission', () => {
     expect(prepareUploads).not.toHaveBeenCalled()
     verify('third-token')
     expect(button).toBeEnabled()
+  })
+})
+
+describe('day-aware upload preparation', () => {
+  it('automatically selects the sole visible date without exposing a second date or selector', async () => {
+    visibility.config = configuration('solemnisation')
+    visibility.refresh.mockResolvedValue(visibility.config)
+    mount([photo()])
+    await details()
+    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument()
+    expect(screen.getByRole('dialog')).not.toHaveTextContent('22')
+    expect(screen.getByRole('dialog')).not.toHaveTextContent(/Nikah|Bride|Groom|Day 0/i)
+    await send()
+    await screen.findByRole('heading', { name: t.success })
+    expect(vi.mocked(prepareUploads).mock.calls[0][0].eventSlug).toBe('solemnisation')
+  })
+
+  it('keeps a framed print locked to its printed date even when both albums are visible', async () => {
+    mount([photo('print.png')], 'reception')
+    await details()
+    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument()
+    await send()
+    await screen.findByRole('heading', { name: t.success })
+    expect(vi.mocked(prepareUploads).mock.calls[0][0].eventSlug).toBe('reception')
+  })
+
+  it('does not relabel or submit a print whose date has become hidden', async () => {
+    visibility.config = configuration('reception')
+    visibility.refresh.mockResolvedValue(visibility.config)
+    mount([photo('original-print.png')], 'solemnisation')
+    await details()
+    verify()
+    expect(screen.getByRole('button', { name: t.startUpload })).toBeDisabled()
+    expect(screen.getByRole('alert')).toHaveTextContent('Return to the photo booth')
+    expect(prepareUploads).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: t.back }))
+    expect(screen.getByText('original-print.png')).toBeInTheDocument()
+  })
+
+  it('rechecks the date after derivative generation and preserves files for review when it changed', async () => {
+    const derivatives = deferred<Awaited<ReturnType<typeof createImageDerivatives>>>()
+    vi.mocked(createImageDerivatives).mockReturnValueOnce(derivatives.promise)
+    visibility.config = configuration('solemnisation')
+    visibility.refresh.mockResolvedValue(visibility.config)
+    mount([photo('overnight.jpg')])
+    await details()
+    await send()
+    await waitFor(() => expect(createImageDerivatives).toHaveBeenCalledOnce())
+    visibility.refresh.mockResolvedValue(configuration('reception'))
+    await act(async () => derivatives.resolve([]))
+    expect(await screen.findByRole('heading', { name: t.sharing })).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('Please review the date')
+    expect(prepareUploads).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: t.back }))
+    expect(screen.getByText('overnight.jpg')).toBeInTheDocument()
+  })
+
+  it('fails closed without discarding local files when visibility cannot be verified', async () => {
+    visibility.config = null
+    visibility.status = 'error'
+    visibility.refresh.mockRejectedValue(new Error('offline'))
+    mount([photo('local-only.jpg')])
+    await details()
+    verify()
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: t.startUpload })).toBeDisabled()
+    expect(screen.getByRole('alert')).toHaveTextContent('selected files are still here')
+    expect(screen.getByRole('dialog')).not.toHaveTextContent(/21|22/)
+    expect(prepareUploads).not.toHaveBeenCalled()
+  })
+
+  it.each([undefined, 'solemnisation'] as const)('allows an already authorized failed transfer with lock %s to retry after its day becomes hidden', async (lockedEventSlug) => {
+    vi.mocked(uploadQueueItem).mockRejectedValueOnce(new UploadTransferError('NETWORK_INTERRUPTED', 'offline')).mockResolvedValue(received())
+    visibility.config = configuration('solemnisation')
+    visibility.refresh.mockResolvedValue(visibility.config)
+    const view = mount([photo('authorized.jpg')], lockedEventSlug)
+    await details()
+    await send()
+    const retry = await screen.findByRole('button', { name: `${t.retryFile} authorized.jpg` })
+    visibility.config = configuration('reception')
+    visibility.refresh.mockResolvedValue(visibility.config)
+    view.reopen()
+    expect(screen.queryByText(/Return to the photo booth/)).not.toBeInTheDocument()
+    if (lockedEventSlug) expect(screen.getByRole('status')).toHaveTextContent('This print is already checked in')
+    fireEvent.click(retry)
+    await screen.findByRole('heading', { name: t.success })
+    expect(screen.queryByText(/This print is already checked in/)).not.toBeInTheDocument()
+    expect(prepareUploads).toHaveBeenCalledOnce()
+    expect(vi.mocked(prepareUploads).mock.calls[0][0].eventSlug).toBe('solemnisation')
+    expect(vi.mocked(uploadQueueItem).mock.calls[1][0].prepared).toEqual(vi.mocked(uploadQueueItem).mock.calls[0][0].prepared)
   })
 })

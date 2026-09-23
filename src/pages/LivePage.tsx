@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Expand, ImageOff, Minimize, RefreshCw } from 'lucide-react'
-import type { EventSlug, GalleryMedia } from '../../shared/contracts'
+import type { EventSlug, GalleryMedia, PublicGalleryConfig } from '../../shared/contracts'
 import { QRCodeCard } from '../components/QRCodeCard'
 import { getGallery, getLiveConfig } from '../services/api'
 import { useLocale } from '../context/useLocale'
+import { useGalleryVisibility } from '../context/useGalleryVisibility'
 import { copy } from '../i18n/copy'
 import { WeddingMonogram } from '../components/WeddingMonogram'
 
@@ -63,11 +64,18 @@ async function findPreloadedNext(items: GalleryMedia[], recent: string[], curren
 }
 
 export default function LivePage() {
+  const { config, status, refresh } = useGalleryVisibility()
+  const { locale } = useLocale()
+  if (!config) return <main className="live-wall"><section className="live-empty" role={status === 'error' ? 'alert' : 'status'}><WeddingMonogram compact /><h1>{locale === 'en' ? 'Our Wedding' : 'Perkahwinan Kami'}</h1><p>{status === 'error' ? (locale === 'en' ? 'The gallery is temporarily unavailable.' : 'Galeri tidak tersedia buat sementara waktu.') : copy[locale].preparing}</p>{status === 'error' ? <button type="button" onClick={() => void refresh().catch(() => undefined)}>{copy[locale].tryAgain}</button> : null}</section></main>
+  return <ConfiguredLivePage key={`${config.mode}|${config.revision}`} config={config} />
+}
+
+function ConfiguredLivePage({ config }: { config: PublicGalleryConfig }) {
   const { locale } = useLocale()
   const t = copy[locale].live
   const eventCopy = copy[locale].upload
   const [items, setItems] = useState<GalleryMedia[]>([])
-  const [source, setSource] = useState<Source>('all')
+  const [source, setSource] = useState<Source>(config.mode === 'both' ? 'all' : config.mode)
   const [current, setCurrent] = useState<GalleryMedia | null>(null)
   const [layout, setLayout] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -75,6 +83,7 @@ export default function LivePage() {
   const recent = useRef<string[]>([])
   const sourceRef = useRef<Source>(source)
   const refreshSequence = useRef(0)
+  useEffect(() => () => { refreshSequence.current += 1 }, [])
 
   const refresh = useCallback(async () => {
     const requestedSource = source
@@ -82,16 +91,21 @@ export default function LivePage() {
     try {
       const page = await getGallery({ event: requestedSource === 'all' ? undefined : requestedSource, limit: 50 })
       if (sequence !== refreshSequence.current || sourceRef.current !== requestedSource) return
-      setItems(page.items)
-      setCurrent((previous) => page.items.find((item) => item.id === previous?.id) || chooseNext(page.items,recent.current) || null)
+      const visible = page.items.filter(item => config.mode === 'both' || item.event.slug === config.mode)
+      setItems(visible)
+      setCurrent((previous) => visible.find((item) => item.id === previous?.id) || chooseNext(visible,recent.current) || null)
       setError(null)
     } catch {
       if (sequence !== refreshSequence.current || sourceRef.current !== requestedSource) return
+      refreshSequence.current += 1
+      setItems([])
+      setCurrent(null)
       setError(t.reconnecting)
     }
-  }, [source, t.reconnecting])
+  }, [source, t.reconnecting, config.mode])
 
   const selectSource = useCallback((nextSource: Source) => {
+    nextSource = config.mode === 'both' ? nextSource : config.mode
     if (sourceRef.current === nextSource) return
     sourceRef.current = nextSource
     refreshSequence.current += 1
@@ -99,7 +113,7 @@ export default function LivePage() {
     setSource(nextSource)
     setItems([])
     setCurrent(null)
-  }, [])
+  }, [config.mode])
 
   useEffect(() => {
     const first = window.setTimeout(() => void refresh(),0)
@@ -108,22 +122,25 @@ export default function LivePage() {
   }, [refresh])
 
   useEffect(() => {
+    let active = true
     const sync = async () => {
-      try { const config = await getLiveConfig(); selectSource(config.source) } catch { /* Keep the last working source. */ }
+      try { const live = await getLiveConfig(); if (active) selectSource(live.source) }
+      catch { if (active) { refreshSequence.current += 1; setItems([]); setCurrent(null); setError(t.reconnecting) } }
     }
     const first = window.setTimeout(() => void sync(),0)
     const timer = window.setInterval(() => void sync(),30_000)
-    return () => { window.clearTimeout(first); window.clearInterval(timer) }
-  }, [selectSource])
+    return () => { active = false; window.clearTimeout(first); window.clearInterval(timer) }
+  }, [selectSource, t.reconnecting])
 
   useEffect(() => {
     if (items.length < 2 || !current) return
 
     let cancelled = false
+    const sequence = refreshSequence.current
     const nextReady = findPreloadedNext(items, recent.current, current.id)
     const timer = window.setTimeout(() => {
       void nextReady.then((next) => {
-        if (cancelled || !next) return
+        if (cancelled || !next || sequence !== refreshSequence.current) return
         const historySize = Math.min(8, Math.max(1, items.length - 1))
         recent.current = [...recent.current, current.id].slice(-historySize)
         setCurrent(next)
@@ -154,12 +171,12 @@ export default function LivePage() {
       <header className="live-header">
         <div className="live-brand">
           <div className="live-brand-mark"><WeddingMonogram compact label="Aleem and Nurulain" /></div>
-          <span>{t.flightMemories} · AN-210827</span>
+          <span>{t.flightMemories}</span>
         </div>
         <div className="live-controls">
-          <div aria-label={t.source}>
+          {config.mode === 'both' ? <div aria-label={t.source}>
             {([['all', t.all], ['solemnisation', t.dayOne], ['reception', t.dayTwo]] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={source === value} onClick={() => selectSource(value)}>{label}</button>)}
-          </div>
+          </div> : null}
           <button type="button" onClick={() => void toggleFullscreen()} aria-label={fullscreen ? t.exitFullscreen : t.enterFullscreen}>{fullscreen ? <Minimize aria-hidden="true" /> : <Expand aria-hidden="true" />}</button>
         </div>
       </header>
@@ -170,7 +187,7 @@ export default function LivePage() {
             {current.mediaType === 'video' ? <video src={current.displayUrl} poster={current.thumbnailUrl} autoPlay muted loop playsInline preload="auto" /> : <img src={current.displayUrl} alt={current.guestMessage || `${t.memoryFrom} ${current.event.slug === 'solemnisation' ? eventCopy.solemnisation : eventCopy.reception}`} />}
           </div>
           <div className="live-caption">
-            <p className="eyebrow">{current.event.slug === 'solemnisation' ? eventCopy.dateOne : eventCopy.dateTwo} · {current.event.slug === 'solemnisation' ? eventCopy.solemnisation : eventCopy.reception}</p>
+            <p className="eyebrow">{current.event.slug === 'solemnisation' ? eventCopy.dateOne : eventCopy.dateTwo}</p>
             {current.guestMessage ? <blockquote>“{current.guestMessage}”</blockquote> : <blockquote>{t.quoteOne}<br />{t.quoteTwo}</blockquote>}
             {current.guestName ? <p>{t.sharedBy} {current.guestName}</p> : null}
           </div>

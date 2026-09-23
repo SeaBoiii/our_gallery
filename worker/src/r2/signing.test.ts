@@ -2,9 +2,23 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fakeEnv } from '../../test/fake'
 import { copyObject, signedDownload, signedPut } from './signing'
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers() })
 
 describe('R2 signing', () => {
+  it('caps a new PUT signature at the original authorization deadline', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime('2027-08-21T12:00:00.500Z')
+    const deadline = '2027-08-21T12:00:20.000Z'
+    const target = await signedPut(fakeEnv(), 'staging/memory.jpg', 'image/jpeg', 600, deadline)
+    const url = new URL(target.url)
+    expect(url.searchParams.get('X-Amz-Date')).toBe('20270821T120000Z')
+    expect(url.searchParams.get('X-Amz-Expires')).toBe('19')
+    expect(Date.parse(target.expiresAt)).toBeLessThanOrEqual(Date.parse(deadline))
+    vi.setSystemTime(deadline)
+    await expect(signedPut(fakeEnv(), 'staging/memory.jpg', 'image/jpeg', 20, deadline))
+      .rejects.toMatchObject({ status: 409, code: 'UPLOAD_AUTHORIZATION_EXPIRED' })
+  })
+
   it('binds the upload content type and overwrite guard into the signature', async () => {
     const target = await signedPut(fakeEnv(), 'staging/2027-08-21/memory.webp', 'image/webp', 120)
     const url = new URL(target.url)

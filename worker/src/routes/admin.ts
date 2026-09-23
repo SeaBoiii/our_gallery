@@ -1,9 +1,11 @@
-import type { AdminMedia, AdminMediaPage, AdminSession, AdminStats, EventSlug, GallerySettings, MediaStatus } from '../../../shared/contracts'
+import type { AdminMedia, AdminMediaPage, AdminSession, AdminSettingsUpdate, AdminStats, EventSlug, GallerySettings, MediaStatus } from '../../../shared/contracts'
+import { applyGalleryVisibilityUpdate, DEFAULT_GALLERY_VISIBILITY, isGalleryDayMode, resolveGalleryVisibility } from '../../../shared/visibility'
 import type { Env } from '../env'
 import { HttpError, isHttpError, json, parseJson, requireOrigin } from '../lib/http'
 import { signedGet } from '../r2/signing'
 import { clearAdminCookie, createAdminSession, requireAdmin, revokeAdminSession, verifyAdminPassword } from '../security/adminSession'
 import { clientIp, rateLimit } from '../security/rateLimit'
+import { parseVisibilitySetting } from '../lib/galleryVisibility'
 
 type AdminMediaRow = {
   id: string; event_slug: EventSlug; event_display_name: string; media_type: 'photo' | 'video'; mime_type: string; original_object_key: string; display_object_key: string | null; thumbnail_object_key: string | null; original_filename: string; guest_name: string | null; guest_message: string | null; status: MediaStatus; derivative_status: AdminMedia['derivativeStatus']; size_bytes: number; created_at: string
@@ -148,12 +150,14 @@ export async function adminDeleteMediaRoute(request: Request, env: Env, mediaId:
 
 async function readSettings(env: Env): Promise<GallerySettings> {
   const [settings, events] = await Promise.all([
-    env.DB.prepare('SELECT key,value FROM settings').all<{ key: string; value: string }>(),
+    env.DB.prepare('SELECT key,value,updated_at FROM settings').all<{ key: string; value: string; updated_at: string }>(),
     env.DB.prepare('SELECT id,slug,name,event_date,display_name,upload_enabled FROM events ORDER BY event_date').all<{ id: string; slug: EventSlug; name: string; event_date: string; display_name: string; upload_enabled: number }>(),
   ])
   const values = new Map(settings.results.map((row) => [row.key,row.value]))
   const autoApproveValue = values.get('auto_approve_uploads')
-  return { uploadsEnabled: values.get('uploads_enabled') !== 'false', autoApproveUploads: autoApproveValue === 'true' || (autoApproveValue !== 'false' && env.AUTO_APPROVE_UPLOADS === 'true'), greetingsEnabled: values.get('greetings_enabled') !== 'false', liveWallSource: (values.get('live_wall_source') || 'all') as GallerySettings['liveWallSource'], events: events.results.map((row) => ({ id: row.id,slug: row.slug,name: row.name,eventDate: row.event_date,displayName: row.display_name,uploadEnabled:Boolean(row.upload_enabled) })) }
+  const uploadsEnabled = values.get('uploads_enabled') !== 'false'
+  const visibility = resolveGalleryVisibility(parseVisibilitySetting(values.get('gallery_visibility')), Date.now(), settings.results.find((row) => row.key === 'gallery_visibility')?.updated_at)
+  return { visibility, uploadsEnabled, autoApproveUploads: autoApproveValue === 'true' || (autoApproveValue !== 'false' && env.AUTO_APPROVE_UPLOADS === 'true'), greetingsEnabled: values.get('greetings_enabled') !== 'false', liveWallSource: (values.get('live_wall_source') || 'all') as GallerySettings['liveWallSource'], events: events.results.map((row) => ({ id: row.id,slug: row.slug,name: 'Our Wedding',eventDate: row.event_date,displayName: row.display_name,uploadEnabled: uploadsEnabled })) }
 }
 
 export async function adminSettingsRoute(request: Request, env: Env) {
@@ -165,22 +169,39 @@ export async function adminSettingsRoute(request: Request, env: Env) {
 export async function adminUpdateSettingsRoute(request: Request, env: Env) {
   requireOrigin(request, env)
   const admin = await requireAdmin(request, env)
-  const payload = await parseJson<{ uploadsEnabled?: boolean; autoApproveUploads?: boolean; greetingsEnabled?: boolean; liveWallSource?: 'all' | EventSlug; event?: { slug?: EventSlug; uploadEnabled?: boolean } }>(request)
+  const payload = await parseJson<AdminSettingsUpdate>(request)
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)
+    || Object.keys(payload).some((key) => !['uploadsEnabled','autoApproveUploads','greetingsEnabled','liveWallSource','visibility'].includes(key))) {
+    throw new HttpError(400, 'INVALID_SETTINGS', 'Unknown gallery setting. Please refresh the admin page.')
+  }
+  for (const key of ['uploadsEnabled','autoApproveUploads','greetingsEnabled'] as const) {
+    if (key in payload && typeof payload[key] !== 'boolean') throw new HttpError(400, 'INVALID_SETTINGS', 'Settings must use a valid enabled or disabled value.')
+  }
   const statements: D1PreparedStatement[] = []
   const now = new Date().toISOString()
   if (typeof payload.uploadsEnabled === 'boolean') statements.push(env.DB.prepare("INSERT INTO settings(key,value,updated_at) VALUES('uploads_enabled',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at").bind(String(payload.uploadsEnabled),now))
   if (typeof payload.autoApproveUploads === 'boolean') statements.push(env.DB.prepare("INSERT INTO settings(key,value,updated_at) VALUES('auto_approve_uploads',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at").bind(String(payload.autoApproveUploads),now))
   if (typeof payload.greetingsEnabled === 'boolean') statements.push(env.DB.prepare("INSERT INTO settings(key,value,updated_at) VALUES('greetings_enabled',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at").bind(String(payload.greetingsEnabled),now))
-  if (payload.liveWallSource) {
-    if (!['all','solemnisation','reception'].includes(payload.liveWallSource)) throw new HttpError(400,'INVALID_LIVE_SOURCE','Unknown live wall source.')
+  if ('liveWallSource' in payload) {
+    if (!['all','solemnisation','reception'].includes(payload.liveWallSource || '')) throw new HttpError(400,'INVALID_LIVE_SOURCE','Unknown live wall source.')
     statements.push(env.DB.prepare("INSERT INTO settings(key,value,updated_at) VALUES('live_wall_source',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at").bind(payload.liveWallSource,now))
   }
-  if (payload.event) {
-    if (!payload.event.slug || !['solemnisation','reception'].includes(payload.event.slug) || typeof payload.event.uploadEnabled !== 'boolean') throw new HttpError(400,'INVALID_EVENT_SETTING','Unknown event setting.')
-    statements.push(env.DB.prepare('UPDATE events SET upload_enabled=? WHERE slug=?').bind(payload.event.uploadEnabled ? 1 : 0,payload.event.slug))
+  if ('visibility' in payload) {
+    const update = payload.visibility
+    if (!update || typeof update !== 'object' || Array.isArray(update)
+      || !['automatic','manual'].includes(update.control)
+      || Object.keys(update).some((key) => key !== 'control' && !(update.control === 'manual' && key === 'mode'))
+      || (update.control === 'manual' && !isGalleryDayMode(update.mode))) {
+      throw new HttpError(400, 'INVALID_VISIBILITY', 'Choose automatic control or one valid gallery day mode.')
+    }
+    const row = await env.DB.prepare("SELECT value FROM settings WHERE key = 'gallery_visibility'").first<{ value: string }>()
+    let current = DEFAULT_GALLERY_VISIBILITY
+    try { current = parseVisibilitySetting(row?.value) } catch { /* An authenticated explicit update can repair a broken policy. */ }
+    const next = applyGalleryVisibilityUpdate(current, update)
+    statements.push(env.DB.prepare("INSERT INTO settings(key,value,updated_at) VALUES('gallery_visibility',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at").bind(JSON.stringify(next),now))
   }
   if (!statements.length) throw new HttpError(400,'NO_SETTINGS','No settings were provided.')
+  statements.push(env.DB.prepare('INSERT INTO audit_log(id,actor,action,target_id,metadata_json,created_at) VALUES(?,?,?,?,?,?)').bind(crypto.randomUUID(),`session:${admin.sessionHash.slice(0,12)}`,'settings_update',null,JSON.stringify(payload),now))
   await env.DB.batch(statements)
-  await env.DB.prepare('INSERT INTO audit_log(id,actor,action,target_id,metadata_json,created_at) VALUES(?,?,?,?,?,?)').bind(crypto.randomUUID(),`session:${admin.sessionHash.slice(0,12)}`,'settings_update',null,JSON.stringify(payload),now).run()
   return json(request, env, await readSettings(env), 200, { 'Cache-Control': 'no-store' })
 }

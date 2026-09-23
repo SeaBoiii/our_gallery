@@ -8,9 +8,9 @@ import { base64url, secureValueHash, textEncoder } from '../security/hash'
 import { verifyTurnstile } from '../security/turnstile'
 import { extensionForMime, validateUploadFile } from '../security/validation'
 import { finalizeUpload, type FinalizableUploadRow } from '../uploads/finalize'
+import { readGalleryPolicy } from '../lib/galleryVisibility'
 
 type EventRow = { id: string; slug: EventSlug; event_date: string; display_name: string; upload_enabled: number }
-type SettingRow = { value: string }
 type UploadRequestRow = { session_hash: string; intent_hash: string; status: 'preparing' | 'prepared'; expires_at: string }
 type UploadRow = FinalizableUploadRow & {
   request_id: string
@@ -51,9 +51,9 @@ async function signRow(env: Env, row: UploadRow, ttlSeconds: number): Promise<Pr
   return {
     clientId: row.client_id,
     mediaId: row.id,
-    original: await signedPut(env, row.staging_original_object_key, row.mime_type, ttlSeconds),
-    display: row.staging_display_object_key ? await signedPut(env, row.staging_display_object_key, 'image/webp', ttlSeconds) : undefined,
-    thumbnail: row.staging_thumbnail_object_key ? await signedPut(env, row.staging_thumbnail_object_key, 'image/webp', ttlSeconds) : undefined,
+    original: await signedPut(env, row.staging_original_object_key, row.mime_type, ttlSeconds, row.upload_expires_at),
+    display: row.staging_display_object_key ? await signedPut(env, row.staging_display_object_key, 'image/webp', ttlSeconds, row.upload_expires_at) : undefined,
+    thumbnail: row.staging_thumbnail_object_key ? await signedPut(env, row.staging_thumbnail_object_key, 'image/webp', ttlSeconds, row.upload_expires_at) : undefined,
   }
 }
 
@@ -112,13 +112,10 @@ export async function prepareUploadsRoute(request: Request, env: Env) {
     rateLimit(env, `session:${session}`, 'prepare_mib', 6_144, 600, declaredMib),
   ])
 
-  const [uploadsEnabled, event, requestIntent] = await Promise.all([
-    env.DB.prepare("SELECT value FROM settings WHERE key = 'uploads_enabled'").first<SettingRow>(),
+  const [event, requestIntent] = await Promise.all([
     env.DB.prepare('SELECT id, slug, event_date, display_name, upload_enabled FROM events WHERE slug = ?').bind(payload.eventSlug).first<EventRow>(),
     intentHash(payload),
   ])
-  if (uploadsEnabled?.value === 'false') throw new HttpError(403, 'UPLOADS_CLOSED', 'Memory check-in is currently closed.')
-  if (!event || !event.upload_enabled) throw new HttpError(403, 'EVENT_UPLOADS_CLOSED', 'Memory check-in for this celebration is currently closed.')
 
   const existing = await uploadRowsByRequest(env, payload.requestId)
   if (existing.results.length) {
@@ -134,6 +131,11 @@ export async function prepareUploadsRoute(request: Request, env: Env) {
     return json(request, env, { uploads: await Promise.all(existing.results.map((row) => signRow(env, row, ttl))) })
   }
 
+  // A previously authorized request keeps its original day and retry window even
+  // after visibility changes or global check-in closes. New requests use current policy.
+  const policy = await readGalleryPolicy(env)
+  if (!policy.uploadsEnabled) throw new HttpError(403, 'UPLOADS_CLOSED', 'Memory check-in is currently closed.')
+  if (!event || !policy.slugs.includes(event.slug)) throw new HttpError(403, 'EVENT_UPLOADS_CLOSED', 'Memory check-in for this celebration is currently closed.')
   await claimUploadRequest(env, payload.requestId, sessionHash, requestIntent)
   let requestClaimPreparing = true
   try {
@@ -151,6 +153,11 @@ export async function prepareUploadsRoute(request: Request, env: Env) {
     if (duplicate) throw new HttpError(409, 'DUPLICATE_FILE', `${file.filename}: This memory has already been checked in for this celebration.`, false, { filename: file.filename })
   }
 
+  // Turnstile/storage reads can span midnight or an admin change. Authorize again
+  // after that asynchronous work, immediately before persisting this new batch.
+  const currentPolicy = await readGalleryPolicy(env)
+  if (!currentPolicy.uploadsEnabled) throw new HttpError(403, 'UPLOADS_CLOSED', 'Memory check-in is currently closed.')
+  if (!currentPolicy.slugs.includes(event.slug)) throw new HttpError(403, 'EVENT_UPLOADS_CLOSED', 'Memory check-in for this celebration is currently closed.')
   const now = new Date()
   const ttl = configuredPutTtl(env)
   const authorizationExpiresAt = new Date(now.getTime() + MAX_UPLOAD_AUTHORIZATION_MS).toISOString()
@@ -251,17 +258,21 @@ export async function refreshUploadRoute(request: Request, env: Env, mediaId: st
   await parseJson<Record<string, never>>(request)
   const row = await getOwnedUpload(request, env, mediaId)
   if (row.status !== 'uploading') throw new HttpError(409, 'INVALID_UPLOAD_STATE', 'This upload no longer accepts new file data.')
-  const authorizationRemaining = Math.floor((Date.parse(row.upload_expires_at) - Date.now()) / 1000)
+  let authorizationRemaining = Math.floor((Date.parse(row.upload_expires_at) - Date.now()) / 1000)
   if (!Number.isFinite(authorizationRemaining) || authorizationRemaining < 15) throw new HttpError(409, 'UPLOAD_AUTHORIZATION_EXPIRED', 'This check-in has expired. Please begin again.')
   await rateLimit(env, `refresh:${row.session_hash}`, 'refresh', 40, 600)
   await discardInvalidRetryObjects(env, row)
+  const current = await getOwnedUpload(request, env, mediaId)
+  if (current.status !== 'uploading') throw new HttpError(409, 'INVALID_UPLOAD_STATE', 'This upload no longer accepts new file data.')
+  authorizationRemaining = Math.floor((Date.parse(row.upload_expires_at) - Date.now()) / 1000)
+  if (!Number.isFinite(authorizationRemaining) || authorizationRemaining < 15) throw new HttpError(409, 'UPLOAD_AUTHORIZATION_EXPIRED', 'This check-in has expired. Please begin again.')
   const ttl = Math.max(1, Math.min(configuredPutTtl(env), authorizationRemaining))
-  const lastPutExpiresAt = new Date(Date.now() + ttl * 1000).toISOString()
+  const lastPutExpiresAt = new Date(Math.min(Date.now() + ttl * 1000, Date.parse(row.upload_expires_at))).toISOString()
   await env.DB.prepare("UPDATE media SET last_put_expires_at = ?, staging_purged_at = NULL WHERE id = ? AND status = 'uploading'").bind(lastPutExpiresAt, row.id).run()
   const response: UploadRefreshResponse = {
-    original: await signedPut(env, row.staging_original_object_key, row.mime_type, ttl),
-    display: row.staging_display_object_key ? await signedPut(env, row.staging_display_object_key, 'image/webp', ttl) : undefined,
-    thumbnail: row.staging_thumbnail_object_key ? await signedPut(env, row.staging_thumbnail_object_key, 'image/webp', ttl) : undefined,
+    original: await signedPut(env, row.staging_original_object_key, row.mime_type, ttl, row.upload_expires_at),
+    display: row.staging_display_object_key ? await signedPut(env, row.staging_display_object_key, 'image/webp', ttl, row.upload_expires_at) : undefined,
+    thumbnail: row.staging_thumbnail_object_key ? await signedPut(env, row.staging_thumbnail_object_key, 'image/webp', ttl, row.upload_expires_at) : undefined,
   }
   return json(request, env, response)
 }

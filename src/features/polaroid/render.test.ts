@@ -18,7 +18,7 @@ type TextRun = { text: string; x: number; y: number; maxWidth: number; fontSize:
 
 function makeContext() {
   return {
-    font: '', fillStyle: '', strokeStyle: '', lineWidth: 1, textAlign: '', textBaseline: '',
+    font: '', fillStyle: '', strokeStyle: '', lineWidth: 1, textAlign: '', textBaseline: '', globalAlpha: 1,
     imageSmoothingEnabled: false, imageSmoothingQuality: '',
     drawImage: vi.fn(), fillRect: vi.fn(), strokeRect: vi.fn(), save: vi.fn(), restore: vi.fn(),
     beginPath: vi.fn(), rect: vi.fn(), clip: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), stroke: vi.fn(),
@@ -39,7 +39,7 @@ function bitmap(width = 2400, height = 1800) {
 }
 
 function settings(values: Partial<PolaroidSettings> = {}): PolaroidSettings {
-  return { ...renderer.DEFAULT_POLAROID_SETTINGS, ...values }
+  return { ...renderer.DEFAULT_POLAROID_SETTINGS, celebration: 'solemnisation', ...values }
 }
 
 function photo(width = 4000, height = 3000): LoadedPhoto {
@@ -47,7 +47,7 @@ function photo(width = 4000, height = 3000): LoadedPhoto {
 }
 
 function boothSettings(values: Partial<BoothSettings> = {}): BoothSettings {
-  return { ...renderer.DEFAULT_BOOTH_SETTINGS, ...values }
+  return { ...renderer.DEFAULT_BOOTH_SETTINGS, celebration: 'solemnisation', ...values }
 }
 
 function boothPhotos(count = 4): BoothPhoto[] {
@@ -271,7 +271,7 @@ describe('portable finishes and bounded captions', () => {
 })
 
 describe('shared preview and PNG renderer', () => {
-  it('draws the full-resolution rotated photo and keeps caption above the monogram', async () => {
+  it('draws the full-resolution rotated photo and keeps caption above the wedding names', async () => {
     const canvas = document.createElement('canvas')
     const source = photo()
     const caption = 'One beautiful day, so many memories, all our favourite people'
@@ -286,7 +286,9 @@ describe('shared preview and PNG renderer', () => {
     const captionCalls = output.fillText.mock.calls.filter((call) => call[2] < 1280)
     expect(captionCalls).toHaveLength(2)
     expect(captionCalls.every((call) => call[2] <= 1248 && call[3] === 984)).toBe(true)
-    expect(output.fillText).toHaveBeenCalledWith('Aleem & Nurulain', 600, 1398, 912)
+    const names = output.textRuns.find(run => run.text === 'Aleem & Nurulain')!
+    expect(names.fontSize).toBe(60)
+    expect(captionCalls.every(call => call[2] < names.y - names.fontSize)).toBe(true)
     expect(output.font).toContain('monospace')
     expect(document.fonts.load).toHaveBeenCalledWith('400 48px "Instrument Serif"')
   })
@@ -302,7 +304,7 @@ describe('shared preview and PNG renderer', () => {
     })
     const result = await renderer.exportPolaroid(photo(), settings({ celebration: 'solemnisation', frame: 'airmail' }))
     expect(result.type).toBe('image/png')
-    expect(contexts.some((context) => context.fillText.mock.calls.some((call) => call[0] === '21 AUGUST 2027 · NIKAH & BRIDE’S RECEPTION'))).toBe(true)
+    expect(contexts.some((context) => context.fillText.mock.calls.some((call) => call[0] === '21 AUGUST 2027'))).toBe(true)
     expect(exportCanvases[0].width).toBe(0)
     expect(exportCanvases[0].height).toBe(0)
   })
@@ -320,9 +322,9 @@ describe('shared preview and PNG renderer', () => {
     const canvas = document.createElement('canvas')
     await renderer.drawPolaroid(canvas, photo(), settings({ frame: 'clouds' }))
     expect(canvas.width).toBe(1200)
-    expect(imageSources.map((source) => new URL(source).pathname)).toEqual(['/monogram.png', '/polaroid-clouds.png', '/journal-sky.webp'])
+    expect(imageSources.map((source) => new URL(source).pathname)).toEqual(['/monogram.png', '/polaroid-clouds.png'])
     expect(imageSources.every((source) => new URL(source).origin === window.location.origin)).toBe(true)
-    expect(contexts[0].fillText).toHaveBeenCalledWith('Aleem & Nurulain', 600, 1398, 912)
+    expect(contexts[0].textRuns.find(run => run.text === 'Aleem & Nurulain')?.fontSize).toBe(96)
   })
 
   it('caches decorative assets between previews and export', async () => {
@@ -458,7 +460,7 @@ describe('photobooth layouts and independent crops', () => {
     const dimensions = renderer.getBoothLayout(layout)
     const photoBottom = Math.max(...dimensions.photoRects.map((rect) => rect.y + rect.height))
     for (const frame of ['ivory', 'airmail', 'clouds'] as const) {
-      for (const celebration of ['both', 'solemnisation', 'reception'] as const) {
+      for (const celebration of ['solemnisation', 'reception'] as const) {
         const contextIndex = contexts.length
         await renderer.drawPhotobooth(document.createElement('canvas'), boothPhotos(), boothSettings({
           layout, frame, celebration, caption: 'One beautiful day, so many memories, our favourite people',
@@ -494,6 +496,42 @@ describe('photobooth layouts and independent crops', () => {
     await expect(renderer.exportPhotobooth(incomplete, boothSettings())).rejects.toMatchObject({ code: 'incomplete' })
     await expect(renderer.exportPhotobooth([], boothSettings({ layout: 'single' }))).rejects.toMatchObject({ code: 'incomplete' })
     expect(HTMLCanvasElement.prototype.toBlob).not.toHaveBeenCalled()
+  })
+
+  it.each(layouts)('gives empty and whitespace captions larger names without reserving caption lines in %s', async layout => {
+    for (const caption of ['', '   \n  ']) {
+      const contextIndex = contexts.length
+      await renderer.drawPhotobooth(document.createElement('canvas'), boothPhotos(), boothSettings({ layout, caption }))
+      const output = contexts[contextIndex]
+      expect(output.textRuns.map(run => run.text)).toEqual(['Aleem & Nurulain', '21 AUGUST 2027'])
+      expect(output.textRuns[0].fontSize).toBe(layout === 'strip' ? 82 : 96)
+      const monogram = output.drawImage.mock.calls.find(call => (call[0] as { src?: string }).src?.endsWith('/monogram.png'))!
+      expect(monogram).toBeDefined()
+      expect(monogram[1] + monogram[3] / 2).toBeGreaterThan(renderer.getBoothLayout(layout).width / 2)
+      expect(output.globalAlpha).toBeLessThan(0.1)
+    }
+    const contextIndex = contexts.length
+    await renderer.drawPhotobooth(document.createElement('canvas'), boothPhotos(), boothSettings({ layout, caption: 'Forever together' }))
+    expect(contexts[contextIndex].textRuns.find(run => run.text === 'Aleem & Nurulain')?.fontSize).toBe(layout === 'strip' ? 48 : 60)
+  })
+
+  it('allows a date-free draft but rejects null and legacy combined dates before exporting', async () => {
+    expect(renderer.DEFAULT_BOOTH_SETTINGS.celebration).toBeNull()
+    await renderer.drawPhotobooth(document.createElement('canvas'), boothPhotos(), boothSettings({ celebration: null }))
+    expect(contexts[0].textRuns.some(run => run.text.includes('AUGUST'))).toBe(false)
+    for (const celebration of [null, 'both'] as const) {
+      await expect(renderer.exportPhotobooth(boothPhotos(), boothSettings({ celebration } as unknown as Partial<BoothSettings>))).rejects.toMatchObject({ code: 'date' })
+    }
+    expect(HTMLCanvasElement.prototype.toBlob).not.toHaveBeenCalled()
+  })
+
+  it('uses the dedicated narrow cloud asset for strips and a neutral fallback if that asset fails', async () => {
+    failAssets = true
+    await renderer.drawPhotobooth(document.createElement('canvas'), boothPhotos(), boothSettings({ frame: 'clouds' }))
+    expect(imageSources.map(source => new URL(source).pathname)).toEqual(['/monogram.png', '/photobooth-strip-clouds.png'])
+    expect(contexts[0].fillRect).toHaveBeenCalledWith(0, 0, 900, 2700)
+    expect(contexts[0].drawImage.mock.calls.some(call => call.length === 9)).toBe(false)
+    expect(contexts[0].textRuns.map(run => run.text)).toEqual(['Aleem & Nurulain', '21 AUGUST 2027'])
   })
 
   it('snapshots slot order and crops while optional assets load', async () => {

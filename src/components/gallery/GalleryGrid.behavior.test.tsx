@@ -4,6 +4,7 @@ import type { GalleryMedia, GalleryPage } from '../../../shared/contracts'
 import { LocaleProvider } from '../../context/LocaleContext'
 import { mockGallery } from '../../data/mock'
 import { GalleryGrid } from './GalleryGrid'
+import { publicConfig, TestVisibilityProvider } from '../../test/visibility'
 
 const api = vi.hoisted(() => ({ getGallery: vi.fn(), getGalleryMedia: vi.fn() }))
 vi.mock('../../services/api', () => api)
@@ -24,7 +25,7 @@ vi.mock('./MemoryLightbox', () => ({
 }))
 
 function renderGallery(onAddMemory = vi.fn()) {
-  return render(<LocaleProvider><GalleryGrid onAddMemory={onAddMemory} /></LocaleProvider>)
+  return render(<LocaleProvider><TestVisibilityProvider><GalleryGrid onAddMemory={onAddMemory} /></TestVisibilityProvider></LocaleProvider>)
 }
 
 describe('gallery experience', () => {
@@ -180,5 +181,49 @@ describe('gallery experience', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /open photo/i })[1])
     expect(screen.getByRole('dialog', { name: 'Test memory viewer' })).toHaveTextContent(mockGallery[1].guestName!)
     expect(window.location.search).toContain(`memory=${mockGallery[1].id}`)
+  })
+
+  it('revokes an open hidden-day memory, cursor and late detail/page responses when policy changes', async () => {
+    let intersect: (() => void) | undefined
+    vi.stubGlobal('IntersectionObserver', class {
+      constructor(callback: IntersectionObserverCallback) { intersect = () => callback([{ isIntersecting: true } as IntersectionObserverEntry], this as unknown as IntersectionObserver) }
+      observe = vi.fn()
+      disconnect = vi.fn()
+    })
+    let oldPage!: (page: GalleryPage) => void
+    let oldDetail!: (item: GalleryMedia) => void
+    api.getGallery.mockResolvedValueOnce({ items: [mockGallery[2]], nextCursor: 'hidden-cursor' })
+      .mockReturnValueOnce(new Promise<GalleryPage>(resolve => { oldPage = resolve }))
+      .mockResolvedValueOnce({ items: [mockGallery[0], mockGallery[2]], nextCursor: null })
+    api.getGalleryMedia.mockReturnValue(new Promise<GalleryMedia>(resolve => { oldDetail = resolve }))
+    const onAdd = vi.fn()
+    const tree = (mode: 'both' | 'solemnisation') => <LocaleProvider><TestVisibilityProvider config={publicConfig({ mode })}><GalleryGrid onAddMemory={onAdd} /></TestVisibilityProvider></LocaleProvider>
+    const view = render(tree('both'))
+    fireEvent.click(await screen.findByRole('button', { name: /open photo/i }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    await waitFor(() => expect(intersect).toBeDefined())
+    act(() => intersect?.())
+    view.rerender(tree('solemnisation'))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(window.location.search).not.toContain('memory=')
+    await screen.findByRole('button', { name: /open photo.*21 August/i })
+    await act(async () => {
+      oldPage({ items: [mockGallery[2]], nextCursor: 'stale-next' })
+      oldDetail(mockGallery[2])
+    })
+    expect(document.querySelectorAll('.memory-card')).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: /open photo.*22 August/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '22 August' })).not.toBeInTheDocument()
+    expect(api.getGallery).toHaveBeenLastCalledWith(expect.objectContaining({ event: 'solemnisation' }))
+  })
+
+  it('removes existing media immediately when configuration becomes unavailable', async () => {
+    api.getGallery.mockResolvedValue({ items: [mockGallery[0]], nextCursor: null })
+    const onAdd = vi.fn()
+    const view = render(<LocaleProvider><TestVisibilityProvider><GalleryGrid onAddMemory={onAdd} /></TestVisibilityProvider></LocaleProvider>)
+    await screen.findByRole('button', { name: /open photo/i })
+    view.rerender(<LocaleProvider><TestVisibilityProvider config={null}><GalleryGrid onAddMemory={onAdd} /></TestVisibilityProvider></LocaleProvider>)
+    expect(screen.queryByRole('button', { name: /open photo/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('The gallery is temporarily unavailable')
   })
 })

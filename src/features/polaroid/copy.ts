@@ -1,6 +1,6 @@
 export const polaroidCopy = {
   en: {
-    title: 'The wedding photo booth', eyebrow: 'ALEEM & NURULAIN · 21–22 AUGUST 2027', heading: 'Four moments,', headingEm: 'one keepsake.',
+    title: 'The wedding photo booth', eyebrow: 'ALEEM & NURULAIN', heading: 'Four moments,', headingEm: 'one keepsake.',
     intro: 'Step in, strike a pose, and take a little of our wedding home. Four photographs, wrapped in our story.', back: 'Back to gallery',
     preview: 'Your photo booth preview', emptyTitle: 'Your next favourite memory.', emptyBody: 'Four poses. A three-second countdown for each. Bring your favourite people.', choose: 'Choose photos', camera: 'Start photo booth', replace: 'Replace photo',
     sourceLabel: 'Step into the booth', formats: 'JPG, PNG, WebP or HEIC · up to 25 MB each', privacy: 'Made on your device. Only uploaded if you choose “Add to gallery”.',
@@ -8,7 +8,9 @@ export const polaroidCopy = {
     shots: 'Your photographs', shot: 'Photo', emptyShot: 'empty', selectedShot: 'Selected photo', retake: 'Retake photo', takeOne: 'Take one photo', earlier: 'Move earlier', later: 'Move later', filled: 'photos ready', addRemaining: 'Fill every frame to save your keepsake.', boothHint: 'Four automatic shots, with time for a new pose between each.', pickHint: 'Choose a full set or add photos one at a time.', batchError: 'Choose up to four photos at a time, or one photo when replacing a frame.',
     frame: 'Choose your frame', ivory: 'Ivory vows', airmail: 'Love, airmail', clouds: 'Above the clouds',
     finish: 'Set the mood', original: 'Natural', warm: 'Warm film', mono: 'Black & white',
-    details: 'Make it yours', caption: 'A little caption', captionPlaceholder: 'A day to remember…', optional: 'optional', date: 'The celebration', both: 'Our wedding · 21–22 August', dayOne: '21 August · Nikah & Bride’s Reception', dayTwo: '22 August · Groom’s Reception',
+    details: 'Make it yours', caption: 'A little caption', captionPlaceholder: 'A day to remember…', optional: 'optional', date: 'Wedding date', dayOne: '21 August 2027', dayTwo: '22 August 2027',
+    chooseDate: 'Choose a wedding date', dateRequired: 'Choose a date for your keepsake before saving.', checkingDates: 'Checking the wedding date…',
+    visibilityError: 'The wedding date could not be checked. Your photos and edits are safe. Please try again.', dateChanged: 'The available wedding date changed. Check the date and save again. Your photos and edits are safe.', uploadsClosed: 'Gallery uploads are closed for this date. You can still save your keepsake.',
     crop: 'Fine-tune the photo', drag: 'Drag your photo to find the perfect crop.', keyboardCrop: 'Use arrow keys to move the crop, or use the sliders below.', zoom: 'Zoom', horizontal: 'Left / right', vertical: 'Up / down', rotate: 'Rotate photo', reset: 'Reset crop',
     save: 'Save PNG', upload: 'Add to gallery', preparing: 'Making your keepsake…', loading: 'Opening your photo…', rendering: 'Developing your preview…',
     output: 'pixels · Your frame and caption included', saved: 'Your keepsake is ready. Check your downloads.', uploadNote: 'Photos added to the gallery appear after approval.',
@@ -17,7 +19,7 @@ export const polaroidCopy = {
     spaceError: 'There are not enough empty frames. Choose a complete set, or select a photo to replace individually.',
   },
   ms: {
-    title: 'Ruang foto perkahwinan', eyebrow: 'ALEEM & NURULAIN · 21–22 OGOS 2027', heading: 'Empat detik,', headingEm: 'satu kenangan.',
+    title: 'Ruang foto perkahwinan', eyebrow: 'ALEEM & NURULAIN', heading: 'Empat detik,', headingEm: 'satu kenangan.',
     intro: 'Masuk, bergaya dan bawa pulang secebis kenangan perkahwinan kami. Empat foto, dihiasi kisah kami.', back: 'Kembali ke galeri',
     preview: 'Pratonton ruang foto anda', emptyTitle: 'Kenangan indah yang menanti.', emptyBody: 'Empat gaya. Kiraan tiga saat setiap kali. Ajak insan tersayang bersama.', choose: 'Pilih foto', camera: 'Mula sesi foto', replace: 'Ganti foto',
     sourceLabel: 'Masuk ke ruang foto', formats: 'JPG, PNG, WebP atau HEIC · sehingga 25 MB setiap foto', privacy: 'Dicipta pada peranti anda. Dimuat naik hanya jika anda memilih “Tambah ke galeri”.',
@@ -25,7 +27,9 @@ export const polaroidCopy = {
     shots: 'Foto anda', shot: 'Foto', emptyShot: 'kosong', selectedShot: 'Foto dipilih', retake: 'Ambil semula', takeOne: 'Ambil satu foto', earlier: 'Alih ke hadapan', later: 'Alih ke belakang', filled: 'foto tersedia', addRemaining: 'Lengkapkan semua bingkai untuk menyimpan kenangan anda.', boothHint: 'Empat foto secara automatik, dengan masa untuk menukar gaya.', pickHint: 'Pilih satu set foto atau tambah satu demi satu.', batchError: 'Pilih sehingga empat foto, atau satu foto untuk menggantikan satu bingkai.',
     frame: 'Pilih bingkai anda', ivory: 'Janji cinta', airmail: 'Kiriman kasih', clouds: 'Di atas awan',
     finish: 'Pilih suasana', original: 'Asli', warm: 'Filem hangat', mono: 'Hitam putih',
-    details: 'Sentuhan peribadi', caption: 'Kapsyen ringkas', captionPlaceholder: 'Hari untuk dikenang…', optional: 'pilihan', date: 'Majlis', both: 'Perkahwinan kami · 21–22 Ogos', dayOne: '21 Ogos · Nikah & Resepsi Pengantin Perempuan', dayTwo: '22 Ogos · Resepsi Pengantin Lelaki',
+    details: 'Sentuhan peribadi', caption: 'Kapsyen ringkas', captionPlaceholder: 'Hari untuk dikenang…', optional: 'pilihan', date: 'Tarikh perkahwinan', dayOne: '21 Ogos 2027', dayTwo: '22 Ogos 2027',
+    chooseDate: 'Pilih tarikh perkahwinan', dateRequired: 'Pilih tarikh untuk kenangan anda sebelum menyimpan.', checkingDates: 'Menyemak tarikh perkahwinan…',
+    visibilityError: 'Tarikh perkahwinan tidak dapat disemak. Foto dan suntingan anda selamat. Sila cuba lagi.', dateChanged: 'Tarikh perkahwinan yang tersedia telah berubah. Semak tarikh dan simpan semula. Foto dan suntingan anda selamat.', uploadsClosed: 'Muat naik galeri ditutup untuk tarikh ini. Anda masih boleh menyimpan kenangan anda.',
     crop: 'Laraskan foto', drag: 'Seret foto untuk mendapatkan potongan yang sesuai.', keyboardCrop: 'Gunakan kekunci anak panah atau peluncur di bawah untuk mengubah kedudukan foto.', zoom: 'Zum', horizontal: 'Kiri / kanan', vertical: 'Atas / bawah', rotate: 'Putar foto', reset: 'Set semula',
     save: 'Simpan PNG', upload: 'Tambah ke galeri', preparing: 'Menyediakan kenangan anda…', loading: 'Membuka foto anda…', rendering: 'Menyediakan pratonton…',
     output: 'piksel · Termasuk bingkai dan kapsyen', saved: 'Kenangan anda tersedia. Semak muat turun anda.', uploadNote: 'Foto yang ditambah ke galeri akan dipaparkan selepas diluluskan.',
