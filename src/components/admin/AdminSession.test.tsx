@@ -7,7 +7,6 @@ const api = vi.hoisted(() => ({ getAdminSession: vi.fn(), adminLogin: vi.fn(), a
 vi.mock('../../services/api', () => api)
 vi.mock('./AdminOverview', () => ({ AdminOverview: () => <h1>Test dashboard</h1> }))
 vi.mock('./ModerationPanel', () => ({ ModerationPanel: () => null }))
-vi.mock('./GreetingModerationPanel', () => ({ GreetingModerationPanel: () => null }))
 vi.mock('./SettingsPanel', () => ({ SettingsPanel: () => null }))
 
 describe('admin session expiry', () => {
@@ -16,6 +15,8 @@ describe('admin session expiry', () => {
     api.adminLogin.mockResolvedValue({ authenticated: true })
     render(<MemoryRouter><AdminPage /></MemoryRouter>)
     expect(await screen.findByRole('heading', { name: 'Test dashboard' })).toBeInTheDocument()
+    expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual(['Overview', 'Moderation', 'Settings', 'Sign out'])
+    expect(screen.queryByRole('button', { name: /greetings|guestbook/i })).not.toBeInTheDocument()
     act(() => { window.dispatchEvent(new Event(api.ADMIN_SESSION_EXPIRED_EVENT)) })
     expect(await screen.findByRole('status')).toHaveTextContent('Your admin session has ended')
     expect(screen.queryByRole('heading', { name: 'Test dashboard' })).not.toBeInTheDocument()

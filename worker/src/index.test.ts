@@ -42,4 +42,25 @@ describe('Worker error boundary', () => {
     })
     expect(query).not.toHaveBeenCalled()
   })
+
+  it.each([
+    ['GET', '/api/greetings'],
+    ['POST', '/api/greetings'],
+    ['POST', '/api/greetings/'],
+  ])('retires %s %s without reading or modifying preserved data', async (method, path) => {
+    const env = fakeEnv()
+    const prepare = vi.spyOn(env.DB, 'prepare')
+    const batch = vi.spyOn(env.DB, 'batch')
+    const response = await fetchHandler(new Request(`https://api.test${path}`, {
+      method,
+      headers: { Origin: 'http://localhost:5173', 'Content-Type': 'application/json', 'X-Gallery-Session': crypto.randomUUID() },
+      ...(method === 'POST' ? { body: JSON.stringify({ requestId: crypto.randomUUID(), message: 'An old client must not create this wish.', turnstileToken: 'development-bypass' }) } : {}),
+    }), env)
+
+    expect(response.status).toBe(410)
+    expect(response.headers.get('Cache-Control')).toBe('no-store')
+    await expect(response.json()).resolves.toMatchObject({ ok: false, error: { code: 'GUESTBOOK_RETIRED', retryable: false } })
+    expect(prepare).not.toHaveBeenCalled()
+    expect(batch).not.toHaveBeenCalled()
+  })
 })

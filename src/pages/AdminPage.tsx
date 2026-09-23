@@ -1,15 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import { BarChart3, Images, LoaderCircle, LogOut, MessageSquare, Settings, SquareArrowOutUpRight } from 'lucide-react'
+import { BarChart3, Images, LoaderCircle, LogOut, Settings, SquareArrowOutUpRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { AdminLogin } from '../components/admin/AdminLogin'
 import { AdminOverview } from '../components/admin/AdminOverview'
 import { ModerationPanel } from '../components/admin/ModerationPanel'
-import { GreetingModerationPanel } from '../components/admin/GreetingModerationPanel'
 import { SettingsPanel } from '../components/admin/SettingsPanel'
 import { WeddingMonogram } from '../components/WeddingMonogram'
 import { ADMIN_SESSION_EXPIRED_EVENT, adminLogout, getAdminSession } from '../services/api'
 
-type Tab = 'overview' | 'moderation' | 'greetings' | 'settings'
+type Tab = 'overview' | 'moderation' | 'settings'
 
 export default function AdminPage() {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null)
@@ -49,12 +48,11 @@ export default function AdminPage() {
         <nav aria-label="Admin sections">
           <button type="button" aria-current={tab === 'overview' ? 'page' : undefined} onClick={() => setTab('overview')}><BarChart3 aria-hidden="true" />Overview</button>
           <button type="button" aria-current={tab === 'moderation' ? 'page' : undefined} onClick={() => setTab('moderation')}><Images aria-hidden="true" />Moderation</button>
-          <button type="button" aria-current={tab === 'greetings' ? 'page' : undefined} onClick={() => setTab('greetings')}><MessageSquare aria-hidden="true" />Greetings</button>
           <button type="button" aria-current={tab === 'settings' ? 'page' : undefined} onClick={() => setTab('settings')}><Settings aria-hidden="true" />Settings</button>
         </nav>
         <div className="admin-sidebar-footer"><Link to="/" target="_blank" rel="noreferrer"><SquareArrowOutUpRight aria-hidden="true" />Public gallery</Link><button type="button" onClick={() => void logout()} disabled={logoutBusy} aria-busy={logoutBusy}>{logoutBusy ? <LoaderCircle className="spin" aria-hidden="true" /> : <LogOut aria-hidden="true" />}{logoutBusy ? 'Signing out…' : 'Sign out'}</button></div>
       </aside>
-      <section className="admin-content">{tab === 'overview' ? <AdminOverview /> : tab === 'moderation' ? <ModerationPanel /> : tab === 'greetings' ? <GreetingModerationPanel /> : <SettingsPanel />}</section>
+      <section className="admin-content">{tab === 'overview' ? <AdminOverview /> : tab === 'moderation' ? <ModerationPanel /> : <SettingsPanel />}</section>
       {logoutError ? <div className="admin-toast admin-toast--error" role="alert"><span>{logoutError}</span><button type="button" onClick={() => setLogoutError(null)}>Dismiss</button></div> : null}
     </main>
   )

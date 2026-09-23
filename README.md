@@ -1,29 +1,29 @@
 # Aleem & Nurulain — Our Wedding Collection
 
-A browser-first wedding photo, video and written-greeting collection for 21–22 August 2027. Guests can scan one QR code, take or choose media, add an optional name and message, upload without an account, leave a standalone wish, and browse approved memories and greetings. The same site also provides a full-screen live wall, printable QR card, and a separate moderation console.
+A browser-first wedding photo and video collection for 21–22 August 2027, presented as a wedding and flight journal. Guests can scan one QR code, take or choose media, add an optional name and caption, upload without an account, and browse approved memories. The same site also provides a full-screen live wall, printable QR card, and a separate media moderation console.
 
 The frontend is static React + Vite on GitHub Pages. The API is a Cloudflare Worker backed by private R2 storage and D1 metadata.
 
 
 ## Wedding journal revamp
 
-The gallery uses the current Our Flight design language: navy, ivory and gold, the original A/N monogram, and locally hosted Instrument Serif (license in `public/fonts/`). `/` and `/gallery` show media; `/guestbook` shows approved written wishes. Media sharing has two input steps: choose files, then confirm the celebration and optional guest details.
+The gallery uses the current Our Flight design language: navy, ivory and gold, the original A/N monogram, and locally hosted Instrument Serif (license in `public/fonts/`). `/` and `/gallery` show the photo and video journal. Media sharing has two input steps: choose files, then confirm the celebration and optional guest details.
 
 Albums retain their stable IDs: `solemnisation` is **21 August — Nikah & Bride’s Reception**, and `reception` is **22 August — Groom’s Reception**. Existing uploads and captions keep their associations.
 
-### Moderated guestbook
+### Retired standalone greetings
 
-Greetings are wedding-wide, plain text, and separate from media: optional name (80 characters), required message (1–1,000 characters). Every new greeting is pending until an administrator approves it. The separate Greetings tab supports approval, rejection, deletion, counts and pagination; the independent **Guest greetings** setting closes new submissions. Greeting counts never affect media counts or storage.
+Standalone greetings are retired. The public site has no guestbook or written-wish submission flow, and the admin console has no Greetings tab or Guest greetings switch. Old `/guestbook` links redirect to `/gallery`. Optional captions remain part of photo and video uploads and use normal media moderation.
 
-The additive `0003_greetings.sql` migration creates the table, corrects the day-one display label and disables media auto-approval at launch. Deleted greetings retain a request/session/intent tombstone while clearing their text and name. Identical retries return the original receipt; conflicting intent or session returns 409.
+Both `GET /api/greetings` and `POST /api/greetings` (including their trailing-slash forms) return HTTP `410 Gone` with error code `GUESTBOOK_RETIRED`. Historical greeting rows and the additive `0003_greetings.sql` migration remain in place; retiring the feature does not delete stored data. That migration also corrects the day-one display label and disables media auto-approval at launch.
 
-Verification uses Turnstile action `greeting_submit`; existing uploads retain `upload_prepare`. Greeting submission limits are 5 per browser session and 300 per IP in 10 minutes. Public reads expose only approved entries. Development previews use a stateful guestbook mock to exercise submit → moderate → publish → delete; it is never used in production.
+Media uploads continue to use Turnstile action `upload_prepare`, with the existing upload limits, verification and moderation flow.
 
 ### Release order
 
-Run lint, the full test suite, frontend build and Worker dry-run build. Apply the additive D1 migration and deploy the Worker first; verify `GET /api/greetings` with the configured Origin before releasing the frontend. The previous frontend is compatible with the added API/table. Rollback the application version if needed without deleting the guestbook table or media.
+Run lint, the full test suite, frontend build and Worker dry-run build. Apply any pending additive D1 migrations and deploy the Worker first; verify gallery reads, media uploads and the `410` responses from the retired public greeting endpoints with the configured Origin before releasing the frontend. Keep historical database tables and media when rolling back an application version.
 
-The new migration and route tests run against real in-memory SQLite using Node 24’s `node:sqlite`. Browser visual review and a rehearsal on guests’ actual devices remain useful before the wedding.
+Migration and route tests run against real in-memory SQLite using Node 24’s `node:sqlite`. Browser visual review and a rehearsal on guests’ actual devices remain useful before the wedding.
 
 ## Architecture
 
@@ -329,12 +329,6 @@ GET    /api/gallery/download-status
 GET    /api/gallery/:id
 GET    /api/gallery/:id/download
 GET    /api/live/config
-GET    /api/greetings
-POST   /api/greetings
-GET    /api/admin/greetings
-GET    /api/admin/greetings/stats
-PATCH  /api/admin/greetings/batch
-DELETE /api/admin/greetings/:id
 
 POST   /api/admin/login
 POST   /api/admin/logout
@@ -348,6 +342,8 @@ PATCH  /api/admin/settings
 ```
 
 All responses use a typed `{ ok, data }` or `{ ok, error }` envelope. Raw D1, R2, stack, and exception details are never returned to guests.
+
+The retired public `GET /api/greetings` and `POST /api/greetings` endpoints return HTTP `410 Gone`. The authenticated legacy greeting endpoints (`GET /api/admin/greetings`, `GET /api/admin/greetings/stats`, `PATCH /api/admin/greetings/batch`, and `DELETE /api/admin/greetings/:id`) remain available for historical data compatibility; the gallery admin console does not expose them.
 
 Before `DOWNLOADS_AVAILABLE_AT`, the guest download endpoint returns HTTP `403` with error code `DOWNLOADS_NOT_YET_AVAILABLE` and `details.availableAt`. Gallery browsing remains available and the frontend keeps the download action hidden until the status endpoint confirms release.
 

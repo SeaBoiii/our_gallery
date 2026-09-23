@@ -144,8 +144,7 @@ describe('guestbook on real SQLite', () => {
     await expect(createGreetingRoute(missingOrigin, fixture.env)).rejects.toMatchObject({ code: 'ORIGIN_REQUIRED' })
     await expect(createGreetingRoute(createRequest(draft(), { Origin: 'https://other.example' }), fixture.env)).rejects.toMatchObject({ code: 'ORIGIN_NOT_ALLOWED' })
     await expect(createGreetingRoute(createRequest(draft(), { 'X-Gallery-Session': 'bad' }), fixture.env)).rejects.toMatchObject({ code: 'INVALID_SESSION' })
-    const response = await fetchHandler(createRequest({ ...draft(), message: 'x'.repeat(140_000) }), fixture.env)
-    expect(response.status).toBe(413)
+    await expect(createGreetingRoute(createRequest({ ...draft(), message: 'x'.repeat(140_000) }), fixture.env)).rejects.toMatchObject({ status: 413 })
   })
 
   it('closes new greetings independently of media while allowing successful replay', async () => {
@@ -239,13 +238,16 @@ describe('guestbook on real SQLite', () => {
     }
   })
 
-  it('dispatches greeting endpoints through the Worker router', async () => {
-    const submitted = await data<CreateGreetingReceipt>(await fetchHandler(createRequest(draft()), fixture.env))
-    expect((await fetchHandler(new Request('https://api.test/api/greetings'), fixture.env)).status).toBe(200)
+  it('retires public greeting routes without modifying rows and keeps authenticated archive access', async () => {
+    const id = seed('pending')
+    const originalRows = fixture.database.prepare('SELECT * FROM greetings ORDER BY id').all()
+    expect((await fetchHandler(createRequest(draft()), fixture.env)).status).toBe(410)
+    expect((await fetchHandler(new Request('https://api.test/api/greetings'), fixture.env)).status).toBe(410)
+    expect(fixture.database.prepare('SELECT * FROM greetings ORDER BY id').all()).toEqual(originalRows)
     expect((await fetchHandler(await adminRequest('/api/admin/greetings'), fixture.env)).status).toBe(200)
     expect((await fetchHandler(await adminRequest('/api/admin/greetings/stats'), fixture.env)).status).toBe(200)
-    expect((await fetchHandler(await adminRequest('/api/admin/greetings/batch', 'PATCH', { ids: [submitted.id], status: 'approved' }), fixture.env)).status).toBe(200)
-    expect((await fetchHandler(await adminRequest(`/api/admin/greetings/${submitted.id}`, 'DELETE'), fixture.env)).status).toBe(200)
+    expect((await fetchHandler(await adminRequest('/api/admin/greetings/batch', 'PATCH', { ids: [id], status: 'approved' }), fixture.env)).status).toBe(200)
+    expect((await fetchHandler(await adminRequest(`/api/admin/greetings/${id}`, 'DELETE'), fixture.env)).status).toBe(200)
   })
 })
 

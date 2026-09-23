@@ -24,7 +24,7 @@ export function AdminLogin({ onSuccess, notice }: { onSuccess: () => void; notic
         <WeddingMonogram label="Aleem and Nurulain" />
         <p className="eyebrow">For the wedding team</p>
         <h1>The gallery, cared for.</h1>
-        <p>Sign in to review memories and greetings, manage uploads, and control the live wall.</p>
+        <p>Sign in to review photos and videos, manage uploads, and control the live wall.</p>
         {notice ? <p className="admin-error" role="status">{notice}</p> : null}
         <label><span>Admin password</span><div><KeyRound aria-hidden="true" /><input type="password" value={password} autoComplete="current-password" required onChange={(event) => setPassword(event.target.value)} /></div></label>
         {error ? <p className="admin-error" role="alert">{error}</p> : null}

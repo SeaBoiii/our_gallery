@@ -10,9 +10,8 @@ export function FlightHeader({ onAddMemory }: { onAddMemory: () => void }) {
   const t = copy[locale]
   return (
     <header className="site-header">
-      <Link className="brand-lockup" to="/" aria-label={`Aleem & Nurulain — ${t.flightMemories}`}><WeddingMonogram compact /><span><strong>Aleem & Nurulain</strong><small>{locale === 'en' ? 'Our wedding collection' : 'Koleksi perkahwinan kami'}</small></span></Link>
-      <div className="header-note">21 — 22 AUG 2027 <span>·</span> SINGAPORE</div>
-      <nav className="header-actions" aria-label={t.primaryNavigation}><LanguageToggle /><button className="header-add" type="button" onClick={onAddMemory}><ImagePlus aria-hidden="true" size={16} /><span>{locale === 'en' ? 'Share a memory' : 'Kongsi kenangan'}</span></button></nav>
+      <Link className="brand-lockup" to="/" aria-label={`Aleem & Nurulain — ${t.flightMemories}`}><WeddingMonogram compact /><span><strong>Aleem & Nurulain</strong><small>{locale === 'en' ? 'A wedding to remember' : 'Perkahwinan untuk dikenang'}</small></span></Link>
+      <nav className="header-actions" aria-label={t.primaryNavigation}><a className="header-gallery" href="#gallery">{locale === 'en' ? 'The gallery' : 'Galeri'}</a><LanguageToggle /><button className="header-add" type="button" aria-label={locale === 'en' ? 'Share a memory' : 'Kongsi kenangan'} onClick={onAddMemory}><ImagePlus aria-hidden="true" size={16} /><span>{locale === 'en' ? 'Share a memory' : 'Kongsi kenangan'}</span></button></nav>
     </header>
   )
 }

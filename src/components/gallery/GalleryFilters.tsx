@@ -1,26 +1,29 @@
 import type { EventSlug } from '../../../shared/contracts'
+import type { ReactNode } from 'react'
 import { useLocale } from '../../context/useLocale'
 import { copy } from '../../i18n/copy'
 
 export type GalleryFilterState = { event: EventSlug | 'all'; type: 'photo' | 'video' | 'all' }
 
-export function GalleryFilters({ value, onChange }: { value: GalleryFilterState; onChange: (next: GalleryFilterState) => void }) {
+export function GalleryFilters({ value, onChange, children }: { value: GalleryFilterState; onChange: (next: GalleryFilterState) => void; children?: ReactNode }) {
   const { locale } = useLocale()
   const t = copy[locale].gallery
 
   return (
     <div className="gallery-filters" role="group" aria-label={t.filterAria}>
-      <div className="filter-group" role="group" aria-label={t.celebrationAria}>
+      <div className="gallery-chapters" role="group" aria-label={t.celebrationAria}>
         {([
-          ['all', t.allMemories],
-          ['solemnisation', t.dayOne],
-          ['reception', t.dayTwo],
-        ] as const).map(([key, label]) => (
-          <button key={key} type="button" aria-pressed={value.event === key} onClick={() => onChange({ ...value, event: key })}>{label}</button>
+          ['all', locale === 'en' ? 'The collection' : 'Koleksi', locale === 'en' ? 'All moments' : 'Semua detik', locale === 'en' ? 'Two days. A lifetime of memories.' : 'Dua hari. Kenangan seumur hidup.'],
+          ['solemnisation', locale === 'en' ? 'Chapter 01' : 'Bab 01', locale === 'en' ? '21 August' : '21 Ogos', t.solemnisation],
+          ['reception', locale === 'en' ? 'Chapter 02' : 'Bab 02', locale === 'en' ? '22 August' : '22 Ogos', t.reception],
+        ] as const).map(([key, chapter, label, description]) => (
+          <button key={key} type="button" aria-label={label} aria-pressed={value.event === key} onClick={() => onChange({ ...value, event: key })}>
+            <span className="chapter-label">{chapter}</span><strong>{label}</strong><span className="chapter-description">{description}</span>
+          </button>
         ))}
       </div>
-      <span className="filter-divider" aria-hidden="true" />
-      <div className="filter-group" role="group" aria-label={t.mediaAria}>
+      <div className="gallery-filter-bar">
+      <div className="filter-group gallery-media-filters" role="group" aria-label={t.mediaAria}>
         {([
           ['all', t.all],
           ['photo', t.photos],
@@ -28,6 +31,8 @@ export function GalleryFilters({ value, onChange }: { value: GalleryFilterState;
         ] as const).map(([key, label]) => (
           <button key={key} type="button" aria-pressed={value.type === key} onClick={() => onChange({ ...value, type: key })}>{label}</button>
         ))}
+      </div>
+      {children}
       </div>
     </div>
   )

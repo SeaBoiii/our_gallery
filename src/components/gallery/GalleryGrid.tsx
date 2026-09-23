@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Clock3, ImagePlus, LoaderCircle, RefreshCw } from 'lucide-react'
+import { BookOpen, Clock3, ImagePlus, LayoutGrid, LoaderCircle, RefreshCw } from 'lucide-react'
 import type { GalleryMedia } from '../../../shared/contracts'
 import { GALLERY_PAGE_SIZE } from '../../config'
 import { useLocale } from '../../context/useLocale'
@@ -41,6 +41,7 @@ export function GalleryGrid({ onAddMemory }: { onAddMemory: () => void }) {
   const { locale } = useLocale()
   const t = copy[locale].gallery
   const [filters, setFilters] = useState<GalleryFilterState>({ event: 'all', type: 'all' })
+  const [view, setView] = useState<'journal' | 'grid'>('journal')
   const [items, setItems] = useState<GalleryMedia[]>([])
   const [cursor, setCursor] = useState<string | null>(null)
   const [resetLoadKind, setResetLoadKind] = useState<ResetLoadKind>('initial')
@@ -225,7 +226,12 @@ export function GalleryGrid({ onAddMemory }: { onAddMemory: () => void }) {
       {!downloadsAvailable && releaseDate ? (
         <p className="download-release-note"><Clock3 aria-hidden="true" size={15} />{t.downloadsOpen(releaseDate)}</p>
       ) : null}
-      <GalleryFilters value={filters} onChange={changeFilters} />
+      <GalleryFilters value={filters} onChange={changeFilters}>
+        <div className="gallery-view-switch" role="group" aria-label={locale === 'en' ? 'Gallery layout' : 'Susun atur galeri'}>
+          <button type="button" aria-label={locale === 'en' ? 'Journal view' : 'Paparan jurnal'} aria-pressed={view === 'journal'} onClick={() => setView('journal')}><BookOpen size={16} aria-hidden="true" /><span>{locale === 'en' ? 'Journal' : 'Jurnal'}</span></button>
+          <button type="button" aria-label={locale === 'en' ? 'Grid view' : 'Paparan grid'} aria-pressed={view === 'grid'} onClick={() => setView('grid')}><LayoutGrid size={16} aria-hidden="true" /><span>Grid</span></button>
+        </div>
+      </GalleryFilters>
       <p className="visually-hidden" role="status" aria-live="polite" aria-atomic="true">
         {hasLoaded && !resetLoadKind && !initialError ? t.resultsShown(items.length) : ''}
       </p>
@@ -243,7 +249,7 @@ export function GalleryGrid({ onAddMemory }: { onAddMemory: () => void }) {
 
       {!initialError && resetLoadKind ? (
         <>
-          <div className="memory-grid memory-grid--skeleton" aria-hidden="true">
+          <div className={`memory-grid memory-grid--${view} memory-grid--skeleton`} aria-hidden="true">
             {Array.from({ length: SKELETON_COUNT }, (_, index) => (
               <div key={index} className={`memory-skeleton memory-skeleton--${index % 3}`}>
                 <span /><span /><span />
@@ -272,8 +278,8 @@ export function GalleryGrid({ onAddMemory }: { onAddMemory: () => void }) {
       ) : null}
 
       {!resetLoadKind && items.length > 0 ? (
-        <div className="memory-grid" aria-busy={paginationLoading}>
-          {items.map((item) => <MemoryCard key={item.id} memory={item} onOpen={() => open(item)} />)}
+        <div className={`memory-grid memory-grid--${view}`} aria-busy={paginationLoading}>
+          {items.map((item, index) => <MemoryCard key={item.id} memory={item} number={index + 1} view={view} onOpen={() => open(item)} />)}
         </div>
       ) : null}
 

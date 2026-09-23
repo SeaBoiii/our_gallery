@@ -5,7 +5,7 @@ import { adminBatchMediaRoute, adminDeleteMediaRoute, adminLoginRoute, adminLogo
 import { eventsRoute } from './routes/events'
 import { galleryDetailRoute, galleryDownloadRoute, galleryDownloadStatusRoute, galleryRoute } from './routes/gallery'
 import { liveConfigRoute } from './routes/live'
-import { adminBatchGreetingsRoute, adminDeleteGreetingRoute, adminGreetingStatsRoute, adminGreetingsRoute, createGreetingRoute, greetingsRoute } from './routes/greetings'
+import { adminBatchGreetingsRoute, adminDeleteGreetingRoute, adminGreetingStatsRoute, adminGreetingsRoute } from './routes/greetings'
 import { completeUploadRoute, prepareUploadsRoute, refreshUploadRoute } from './routes/uploads'
 import { cleanupStaleUploads } from './scheduled/cleanup'
 
@@ -20,8 +20,8 @@ export async function fetchHandler(request: Request, env: Env) {
 
     if (request.method === 'GET' && pathname === '/health') return json(request,env,{ status: 'ok', environment: env.ENVIRONMENT })
     if (request.method === 'GET' && pathname === '/api/events') return await eventsRoute(request,env)
-    if (request.method === 'GET' && pathname === '/api/greetings') return await greetingsRoute(request,env)
-    if (request.method === 'POST' && pathname === '/api/greetings') return await createGreetingRoute(request,env)
+    // Keep historical data intact while blocking old clients from reading or submitting wishes.
+    if (/^\/api\/greetings\/?$/.test(pathname)) throw new HttpError(410, 'GUESTBOOK_RETIRED', 'The guestbook is no longer available. Visit the gallery to share photos and videos.')
     if (request.method === 'GET' && pathname === '/api/gallery') return await galleryRoute(request,env)
     if (request.method === 'GET' && pathname === '/api/gallery/download-status') return galleryDownloadStatusRoute(request,env)
     if (request.method === 'GET' && pathname === '/api/live/config') return await liveConfigRoute(request,env)
