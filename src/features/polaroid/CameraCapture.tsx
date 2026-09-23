@@ -4,7 +4,9 @@ import { useLocale } from '../../context/useLocale'
 import { useModalFocus } from '../../hooks/useModalFocus'
 
 type Props = {
-  onCapture: (file: File) => void
+  shotCount?: 1 | 4
+  onComplete?: (files: File[]) => void
+  onCapture?: (file: File) => void
   onClose: () => void
 }
 
@@ -15,15 +17,20 @@ const messages = {
   en: {
     title: 'A little moment, just for you',
     description: 'Find your light. Your photo will be taken after a 3-second countdown.',
+    sessionDescription: 'Four poses, one little keepsake. Each photo has its own 3-second countdown.',
     close: 'Close camera',
     loading: 'Opening your camera…',
     shutter: 'Take photo',
+    startSession: 'Start 4-photo session',
     capturing: 'Making your photo…',
     cancel: 'Cancel',
     cancelCountdown: 'Cancel countdown',
+    cancelSession: 'Cancel session',
     retry: 'Try camera again',
     countdown: (seconds: number) => `Photo in ${seconds}`,
     preview: 'Live camera preview',
+    progress: (shot: number, total: number) => `Photo ${shot} of ${total}`,
+    sessionProgress: 'Photo session progress',
     errors: {
       permission: 'Camera access is turned off. Allow camera access in your browser settings, then try again. You can also close this window and choose a photo.',
       unavailable: 'The camera is not available in this browser. Open this page in a browser with camera access, or close this window and choose a photo.',
@@ -34,15 +41,20 @@ const messages = {
   ms: {
     title: 'Momen kecil, khas untuk anda',
     description: 'Cari cahaya yang sesuai. Foto akan diambil selepas kira detik 3 saat.',
+    sessionDescription: 'Empat gaya, satu kenangan. Setiap foto diambil selepas kira detik 3 saat.',
     close: 'Tutup kamera',
     loading: 'Membuka kamera anda…',
     shutter: 'Ambil foto',
+    startSession: 'Mulakan sesi 4 foto',
     capturing: 'Menyediakan foto anda…',
     cancel: 'Batal',
     cancelCountdown: 'Batalkan kira detik',
+    cancelSession: 'Batalkan sesi',
     retry: 'Cuba kamera lagi',
     countdown: (seconds: number) => `Foto dalam ${seconds} saat`,
     preview: 'Pratonton kamera langsung',
+    progress: (shot: number, total: number) => `Foto ${shot} daripada ${total}`,
+    sessionProgress: 'Kemajuan sesi foto',
     errors: {
       permission: 'Akses kamera dimatikan. Benarkan akses kamera dalam tetapan pelayar, kemudian cuba lagi. Anda juga boleh tutup tetingkap ini dan pilih foto.',
       unavailable: 'Kamera tidak tersedia dalam pelayar ini. Buka halaman ini dalam pelayar yang menyokong akses kamera, atau tutup tetingkap ini dan pilih foto.',
@@ -59,7 +71,7 @@ function cameraError(error: unknown): CameraError {
   return 'busy'
 }
 
-export function CameraCapture({ onCapture, onClose }: Props) {
+export function CameraCapture({ shotCount = 1, onComplete, onCapture, onClose }: Props) {
   const { locale } = useLocale()
   const t = messages[locale]
   const titleId = useId()
@@ -73,10 +85,13 @@ export function CameraCapture({ onCapture, onClose }: Props) {
   const closingRef = useRef(false)
   const capturingRef = useRef(false)
   const mirroredRef = useRef(true)
+  const photosRef = useRef<File[]>([])
   const [mirrored, setMirrored] = useState(true)
   const [status, setStatus] = useState<CameraStatus>('loading')
   const [error, setError] = useState<CameraError | null>(null)
   const [countdown, setCountdown] = useState<number | null>(null)
+  const [currentShot, setCurrentShot] = useState(1)
+  const [completedShots, setCompletedShots] = useState(0)
 
   useModalFocus(dialogRef, true)
 
@@ -95,6 +110,7 @@ export function CameraCapture({ onCapture, onClose }: Props) {
 
   const invalidate = useCallback(() => {
     generationRef.current += 1
+    photosRef.current = []
     clearCountdown()
     stopStream()
   }, [clearCountdown, stopStream])
@@ -107,6 +123,8 @@ export function CameraCapture({ onCapture, onClose }: Props) {
     invalidate()
     if (!activeRef.current || closingRef.current) return
     setCountdown(null)
+    setCurrentShot(1)
+    setCompletedShots(0)
     setError(kind)
     setStatus('error')
   }, [invalidate])
@@ -115,6 +133,8 @@ export function CameraCapture({ onCapture, onClose }: Props) {
     invalidate()
     const generation = generationRef.current
     setCountdown(null)
+    setCurrentShot(1)
+    setCompletedShots(0)
     setError(null)
     setStatus('loading')
 
@@ -186,7 +206,7 @@ export function CameraCapture({ onCapture, onClose }: Props) {
     }
   }, [close])
 
-  const takePhoto = (generation: number) => {
+  const takePhoto = (generation: number, shotIndex: number, nextShot: () => void) => {
     if (!isCurrent(generation)) return
     setCountdown(null)
     const video = videoRef.current
@@ -210,17 +230,26 @@ export function CameraCapture({ onCapture, onClose }: Props) {
         context.scale(-1, 1)
       }
       context.drawImage(video, 0, 0, canvas.width, canvas.height)
-      // Release the camera while the captured frame is encoded.
-      stopStream()
+      // A session keeps its live stream between poses; the final frame releases it.
+      if (shotIndex === shotCount - 1) stopStream()
       canvas.toBlob((blob) => {
         if (!isCurrent(generation)) return
         if (!blob) {
           fail('capture')
           return
         }
+        const filename = shotCount === 1 ? 'wedding-photo.jpg' : `wedding-photo-${shotIndex + 1}.jpg`
+        photosRef.current.push(new File([blob], filename, { type: 'image/jpeg' }))
+        setCompletedShots(photosRef.current.length)
+        if (photosRef.current.length < shotCount) {
+          nextShot()
+          return
+        }
+        const photos = [...photosRef.current]
         closingRef.current = true
         invalidate()
-        onCapture(new File([blob], 'wedding-photo.jpg', { type: 'image/jpeg' }))
+        if (onComplete) onComplete(photos)
+        else if (shotCount === 1) onCapture?.(photos[0])
       }, 'image/jpeg', 0.92)
     } catch {
       if (isCurrent(generation)) fail('capture')
@@ -230,28 +259,37 @@ export function CameraCapture({ onCapture, onClose }: Props) {
   const startCountdown = () => {
     if (status !== 'ready' || capturingRef.current || !streamRef.current || closingRef.current) return
     capturingRef.current = true
+    photosRef.current = []
+    setCompletedShots(0)
     const generation = generationRef.current
-    let remaining = 3
-    setCountdown(remaining)
     setStatus('capturing')
-    timerRef.current = window.setInterval(() => {
-      if (!isCurrent(generation)) {
-        clearCountdown()
-        return
-      }
-      remaining -= 1
-      if (remaining > 0) {
-        setCountdown(remaining)
-      } else {
-        if (timerRef.current !== null) window.clearInterval(timerRef.current)
-        timerRef.current = null
-        takePhoto(generation)
-      }
-    }, 1000)
+    const nextShot = (shotIndex: number) => {
+      if (!isCurrent(generation)) return
+      let remaining = 3
+      setCurrentShot(shotIndex + 1)
+      setCountdown(remaining)
+      timerRef.current = window.setInterval(() => {
+        if (!isCurrent(generation)) {
+          clearCountdown()
+          return
+        }
+        remaining -= 1
+        if (remaining > 0) {
+          setCountdown(remaining)
+        } else {
+          if (timerRef.current !== null) window.clearInterval(timerRef.current)
+          timerRef.current = null
+          takePhoto(generation, shotIndex, () => nextShot(shotIndex + 1))
+        }
+      }, 1000)
+    }
+    nextShot(0)
   }
 
   const cancelCountdown = () => {
     clearCountdown()
+    generationRef.current += 1
+    photosRef.current = []
     setCountdown(null)
     setStatus('ready')
   }
@@ -261,7 +299,18 @@ export function CameraCapture({ onCapture, onClose }: Props) {
       <div ref={dialogRef} className="camera-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} tabIndex={-1}>
         <button type="button" className="camera-close" aria-label={t.close} onClick={close} data-modal-autofocus><X aria-hidden="true" /></button>
         <h2 id={titleId} className="camera-heading" data-modal-focus-recovery tabIndex={-1}>{t.title}</h2>
-        <p id={descriptionId} className="camera-description">{t.description}</p>
+        <p id={descriptionId} className="camera-description">{shotCount === 4 ? t.sessionDescription : t.description}</p>
+        {shotCount === 4 && <div className="camera-session-progress">
+          <p className="camera-progress" role="status">{t.progress(currentShot, shotCount)}</p>
+          <ol className="camera-shot-indicators" aria-label={t.sessionProgress}>
+            {Array.from({ length: shotCount }, (_, index) => <li
+              key={index}
+              className={`camera-shot-indicator${index < completedShots ? ' is-complete' : index === currentShot - 1 ? ' is-active' : ''}`}
+              aria-label={t.progress(index + 1, shotCount)}
+              aria-current={index === currentShot - 1 ? 'step' : undefined}
+            >{index + 1}</li>)}
+          </ol>
+        </div>}
         <div className="camera-viewfinder" aria-busy={status === 'loading'}>
           <video
             ref={videoRef}
@@ -285,10 +334,10 @@ export function CameraCapture({ onCapture, onClose }: Props) {
           {status === 'capturing' && countdown === null && <p className="camera-loading" role="status">{t.capturing}</p>}
         </div>
         <div className="camera-controls">
-          <button type="button" className="button button-secondary" onClick={countdown !== null ? cancelCountdown : close}>{countdown !== null ? t.cancelCountdown : t.cancel}</button>
+          <button type="button" className="button button-secondary" onClick={shotCount === 1 && countdown !== null ? cancelCountdown : close}>{shotCount === 4 && status === 'capturing' ? t.cancelSession : countdown !== null ? t.cancelCountdown : t.cancel}</button>
           {status === 'error'
             ? <button type="button" className="button button-primary" onClick={() => void startCamera()}><RotateCcw aria-hidden="true" />{t.retry}</button>
-            : <button type="button" className="button button-primary camera-shutter" disabled={status !== 'ready'} onClick={startCountdown}><Camera aria-hidden="true" />{t.shutter}</button>}
+            : <button type="button" className="button button-primary camera-shutter" disabled={status !== 'ready'} onClick={startCountdown}><Camera aria-hidden="true" />{shotCount === 4 ? t.startSession : t.shutter}</button>}
         </div>
       </div>
     </div>

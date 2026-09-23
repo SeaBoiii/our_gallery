@@ -13,11 +13,13 @@ These are design references; no third-party photography, layouts or written copy
 
 ## In-browser keepsake studio
 
-- [Angie's online photobooth](https://getangie.com/photobooth): browser camera capture, a short countdown, and a finished photo keepsake. This site uses a single-camera wedding flow; no shared rooms or third-party photobooth service are involved.
+- [Angie's online photobooth](https://getangie.com/photobooth): the user's requested reference for a browser photobooth. Its client-rendered interface was not inspectable through the available text browser during this update.
+- [PicaPica](https://picapica.app/): a four-shot countdown sequence followed by styling and saving the finished strip.
+- [Pixlery](https://pixlery.com/tools/online-photo-booth/): camera or local-file input, individual retakes, rearranging photos, crop adjustment and local export.
 - [TripMemo's Polaroid generator](https://tripmemo.app/polaroid-frame-generator): a live crop/frame/caption preview and local image processing.
-- The wedding palette, original monogram, Instrument Serif and flight details come from this gallery and Our Flight. Ivory, airmail and cloud frames are rendered at 1200 × 1500 pixels. The original generated cloud stationery asset and exact prompt are documented in [POLAROID_ASSETS.md](POLAROID_ASSETS.md).
+- The wedding palette, original monogram, Instrument Serif and flight details come from this gallery and Our Flight. Ivory, airmail and cloud frames support a four-shot strip (900 × 2700), a four-frame grid (1600 × 1900), and a single Polaroid (1200 × 1500). The original generated cloud stationery asset is reused; its exact prompt is documented in [POLAROID_ASSETS.md](POLAROID_ASSETS.md).
 
-The same canvas renderer produces the preview and exported PNG. Local photos and camera frames stay on the device until the guest explicitly chooses **Add to gallery**, which opens the existing moderated uploader. No existing gallery original or timed download is fetched by the studio. Actual frame outputs were rendered through the production rendering module using an isolated native canvas adapter and visually inspected; this validates the export artwork, not the browser UI or a physical camera.
+The same canvas renderer produces the preview and exported PNG. Local photos and camera frames stay on the device until the guest explicitly chooses **Add to gallery**, which opens the existing moderated uploader. No existing gallery original or timed download is fetched by the studio. All nine frame/layout combinations were rendered through the production module using an isolated native canvas adapter, exported as PNG, and visually inspected, including enlarged footers to verify the text clears the lower rule. This validates the export artwork, not the browser UI or a physical camera. Development sample images are used only in these local verification artifacts.
 
 ## New illustration
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { LoadedPhoto, PolaroidSettings } from './types'
+import type { BoothLayout, BoothPhoto, BoothSettings, LoadedPhoto, PolaroidSettings } from './types'
 
 const { convertHeic } = vi.hoisted(() => ({ convertHeic: vi.fn() }))
 vi.mock('heic2any', () => ({ default: convertHeic }))
@@ -14,6 +14,7 @@ let imageSources: string[]
 let pendingAssets: (() => void)[]
 let contexts: MockContext[]
 const originalFonts = Object.getOwnPropertyDescriptor(document, 'fonts')
+type TextRun = { text: string; x: number; y: number; maxWidth: number; fontSize: number }
 
 function makeContext() {
   return {
@@ -24,13 +25,16 @@ function makeContext() {
     translate: vi.fn(), rotate: vi.fn(), putImageData: vi.fn(),
     getImageData: vi.fn(() => ({ data: new Uint8ClampedArray([100, 150, 200, 255]) })),
     createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
-    fillText: vi.fn(),
-    measureText(text: string) { return { width: Array.from(text).length * Number(this.font.match(/(\d+)px/)?.[1] ?? 20) * 0.55 } },
+    textRuns: [] as TextRun[],
+    fillText: vi.fn(function (this: { font: string; textRuns: TextRun[] }, text: string, x: number, y: number, maxWidth: number) {
+      this.textRuns.push({ text, x, y, maxWidth, fontSize: Number(this.font.match(/([\d.]+)px/)?.[1] ?? 20) })
+    }),
+    measureText(text: string) { return { width: Array.from(text).length * Number(this.font.match(/([\d.]+)px/)?.[1] ?? 20) * 0.55 } },
   }
 }
 type MockContext = ReturnType<typeof makeContext>
 
-function bitmap(width = 4000, height = 3000) {
+function bitmap(width = 2400, height = 1800) {
   return { width, height, close: vi.fn() }
 }
 
@@ -40,6 +44,14 @@ function settings(values: Partial<PolaroidSettings> = {}): PolaroidSettings {
 
 function photo(width = 4000, height = 3000): LoadedPhoto {
   return { source: document.createElement('canvas'), width, height, dispose: vi.fn() }
+}
+
+function boothSettings(values: Partial<BoothSettings> = {}): BoothSettings {
+  return { ...renderer.DEFAULT_BOOTH_SETTINGS, ...values }
+}
+
+function boothPhotos(count = 4): BoothPhoto[] {
+  return Array.from({ length: count }, () => ({ photo: photo(), crop: { ...renderer.DEFAULT_PHOTO_CROP } }))
 }
 
 beforeEach(async () => {
@@ -156,12 +168,12 @@ describe('local photo loading and resource ownership', () => {
   })
 
   it('uses native orientation decoding and closes its bitmap exactly once', async () => {
-    const decoded = bitmap(3000, 4000)
+    const decoded = bitmap(1800, 2400)
     bitmapDecode.mockResolvedValue(decoded)
     const file = new File(['photo'], 'phone.JPEG')
     const loaded = await renderer.loadPolaroidPhoto(file)
     expect(bitmapDecode).toHaveBeenCalledWith(file, { imageOrientation: 'from-image' })
-    expect(loaded).toMatchObject({ source: decoded, width: 3000, height: 4000 })
+    expect(loaded).toMatchObject({ source: decoded, width: 1800, height: 2400 })
     loaded.dispose()
     loaded.dispose()
     expect(decoded.close).toHaveBeenCalledTimes(1)
@@ -184,7 +196,7 @@ describe('local photo loading and resource ownership', () => {
     expect(convertHeic).toHaveBeenCalledWith({ blob: file, toType: 'image/jpeg', quality: 0.95 })
     expect(bitmapDecode).toHaveBeenLastCalledWith(converted, { imageOrientation: 'from-image' })
     expect(revokeUrl).toHaveBeenCalledWith('blob:local-photo')
-    expect(loaded.width).toBe(4000)
+    expect(loaded.width).toBe(2400)
   })
 
   it('retains a native image object URL only until disposal', async () => {
@@ -206,14 +218,23 @@ describe('local photo loading and resource ownership', () => {
     expect(revokeUrl).toHaveBeenCalledTimes(1)
   })
 
-  it('downscales huge images to a bounded raster, closing the original decode', async () => {
-    const decoded = bitmap(6000, 4000)
+  it.each([
+    [6000, 4000, 2400, 1600],
+    [4000, 6000, 1600, 2400],
+    [5000, 5000, 2400, 2400],
+  ])('caps a %i×%i source at 2400 pixels and releases both raster resources', async (width, height, resizedWidth, resizedHeight) => {
+    const decoded = bitmap(width, height)
     bitmapDecode.mockResolvedValue(decoded)
     const loaded = await renderer.loadPolaroidPhoto(new File(['photo'], 'large.jpg', { type: 'image/jpeg' }))
-    expect(loaded).toMatchObject({ width: 4096, height: 2731 })
+    expect(loaded).toMatchObject({ width: resizedWidth, height: resizedHeight })
+    expect(Math.max(loaded.width, loaded.height)).toBe(2400)
+    expect(loaded.width * loaded.height * 4).toBeLessThanOrEqual(2400 * 2400 * 4)
+    expect(loaded.width / loaded.height).toBeCloseTo(width / height)
     expect(decoded.close).toHaveBeenCalledTimes(1)
-    expect(contexts[0].drawImage).toHaveBeenCalledWith(decoded, 0, 0, 4096, 2731)
+    expect(contexts[0].drawImage).toHaveBeenCalledWith(decoded, 0, 0, resizedWidth, resizedHeight)
     loaded.dispose()
+    loaded.dispose()
+    expect(decoded.close).toHaveBeenCalledTimes(1)
     expect((loaded.source as HTMLCanvasElement).width).toBe(0)
     expect((loaded.source as HTMLCanvasElement).height).toBe(0)
   })
@@ -265,7 +286,7 @@ describe('shared preview and PNG renderer', () => {
     const captionCalls = output.fillText.mock.calls.filter((call) => call[2] < 1280)
     expect(captionCalls).toHaveLength(2)
     expect(captionCalls.every((call) => call[2] <= 1248 && call[3] === 984)).toBe(true)
-    expect(output.fillText).toHaveBeenCalledWith('Aleem & Nurulain', 600, 1421, 760)
+    expect(output.fillText).toHaveBeenCalledWith('Aleem & Nurulain', 600, 1398, 912)
     expect(output.font).toContain('monospace')
     expect(document.fonts.load).toHaveBeenCalledWith('400 48px "Instrument Serif"')
   })
@@ -301,7 +322,7 @@ describe('shared preview and PNG renderer', () => {
     expect(canvas.width).toBe(1200)
     expect(imageSources.map((source) => new URL(source).pathname)).toEqual(['/monogram.png', '/polaroid-clouds.png', '/journal-sky.webp'])
     expect(imageSources.every((source) => new URL(source).origin === window.location.origin)).toBe(true)
-    expect(contexts[0].fillText).toHaveBeenCalledWith('Aleem & Nurulain', 600, 1421, 760)
+    expect(contexts[0].fillText).toHaveBeenCalledWith('Aleem & Nurulain', 600, 1398, 912)
   })
 
   it('caches decorative assets between previews and export', async () => {
@@ -344,5 +365,163 @@ describe('shared preview and PNG renderer', () => {
   it('returns a clear export error when PNG encoding fails', async () => {
     vi.mocked(HTMLCanvasElement.prototype.toBlob).mockImplementation((callback) => callback(null))
     await expect(renderer.exportPolaroid(photo(), settings())).rejects.toMatchObject({ code: 'export' })
+  })
+})
+
+describe('photobooth layouts and independent crops', () => {
+  const layouts: BoothLayout[] = ['strip', 'grid', 'single']
+
+  it('defaults to a four-photo strip and retains the original single-photo dimensions', () => {
+    expect(renderer.DEFAULT_BOOTH_SETTINGS.layout).toBe('strip')
+    expect(renderer.getBoothLayout('strip')).toMatchObject({ width: 900, height: 2700 })
+    expect(renderer.getBoothLayout('grid')).toMatchObject({ width: 1600, height: 1900 })
+    expect(renderer.getBoothLayout('single')).toEqual({ width: 1200, height: 1500, photoRects: [{ ...renderer.PHOTO_RECT }] })
+    expect(renderer.normalizeBoothSettings(boothSettings({ layout: 'invalid' as BoothLayout })).layout).toBe('strip')
+    const changed = renderer.getBoothLayout('strip')
+    changed.photoRects[0].x = -200
+    expect(renderer.getBoothLayout('strip').photoRects[0].x).toBe(72)
+  })
+
+  it.each(layouts)('places distinct, non-overlapping photo slots inside the %s frame', (layout) => {
+    const dimensions = renderer.getBoothLayout(layout)
+    expect(dimensions.photoRects).toHaveLength(layout === 'single' ? 1 : 4)
+    expect(new Set(dimensions.photoRects.map((rect) => `${rect.x},${rect.y}`)).size).toBe(dimensions.photoRects.length)
+    dimensions.photoRects.forEach((rect, index) => {
+      expect(rect.x).toBeGreaterThan(0)
+      expect(rect.y).toBeGreaterThan(0)
+      expect(rect.x + rect.width).toBeLessThan(dimensions.width)
+      expect(rect.y + rect.height).toBeLessThan(dimensions.height - 200)
+      expect(rect.width / rect.height).toBeCloseTo(layout === 'strip' ? 4 / 3 : 1)
+      dimensions.photoRects.slice(index + 1).forEach((other) => {
+        expect(rect.x + rect.width <= other.x || other.x + other.width <= rect.x || rect.y + rect.height <= other.y || other.y + other.height <= rect.y).toBe(true)
+      })
+    })
+  })
+
+  it.each([0, 90, 180, 270] as const)('keeps rectangular strip crops inside every rotated source at %i degrees', (rotation) => {
+    const rect = renderer.getBoothLayout('strip').photoRects[0]
+    for (const [width, height] of [[4000, 3000], [3000, 4000], [800, 800]]) {
+      for (const zoom of [1, 1.35, 3]) {
+        for (const positionX of [-1, 0, 1]) {
+          for (const positionY of [-1, 0, 1]) {
+            const geometry = renderer.getPhotoGeometry(width, height, { rotation, zoom, positionX, positionY }, rect)
+            const sideways = rotation === 90 || rotation === 270
+            expect(geometry.rotatedDrawWidth).toBeGreaterThanOrEqual(rect.width - 0.00001)
+            expect(geometry.rotatedDrawHeight).toBeGreaterThanOrEqual(rect.height - 0.00001)
+            expect(geometry.sourceCrop.x).toBeGreaterThanOrEqual(0)
+            expect(geometry.sourceCrop.y).toBeGreaterThanOrEqual(0)
+            expect(geometry.sourceCrop.x + geometry.sourceCrop.width).toBeLessThanOrEqual((sideways ? height : width) + 0.00001)
+            expect(geometry.sourceCrop.y + geometry.sourceCrop.height).toBeLessThanOrEqual((sideways ? width : height) + 0.00001)
+            expect(geometry.sourceCrop.width / geometry.sourceCrop.height).toBeCloseTo(4 / 3)
+          }
+        }
+      }
+    }
+  })
+
+  it('converts panning using the active rectangle and preserves the other slot crops', () => {
+    const entries = boothPhotos()
+    const before = entries.map((entry) => ({ ...entry.crop }))
+    const rect = renderer.getBoothLayout('strip').photoRects[0]
+    const result = renderer.boothPositionDelta(entries[0].photo, { ...entries[0].crop, zoom: 2 }, rect, 189, -141.75)
+    expect(result).toEqual({ positionX: 0.5, positionY: -0.5 })
+    expect(entries.map((entry) => entry.crop)).toEqual(before)
+    expect(renderer.boothPositionDelta(entries[0].photo, entries[0].crop, rect, 1000, 1000)).toEqual({ positionX: 0, positionY: 0 })
+    const rotated = { ...entries[0].crop, rotation: 90 as const }
+    expect(renderer.boothPositionDelta(entries[0].photo, rotated, rect, 1000, 220.5)).toEqual({ positionX: 0, positionY: 1 })
+  })
+
+  it.each(layouts)('exports all required %s photos at the layout dimensions in slot order', async (layout) => {
+    const entries = boothPhotos(layout === 'single' ? 1 : 4)
+    entries.forEach((entry, index) => { entry.crop.rotation = [0, 90, 180, 270][index] as 0 | 90 | 180 | 270 })
+    const dimensions = renderer.getBoothLayout(layout)
+    vi.mocked(HTMLCanvasElement.prototype.toBlob).mockImplementation(function (this: HTMLCanvasElement, callback, type) {
+      expect(this.width).toBe(dimensions.width)
+      expect(this.height).toBe(dimensions.height)
+      expect(type).toBe('image/png')
+      callback(new Blob(['png-data'], { type: 'image/png' }))
+    })
+    const result = await renderer.exportPhotobooth(entries, boothSettings({ layout, finish: 'warm' }))
+    expect(result.type).toBe('image/png')
+    const photoContexts = contexts.filter((context) => context.rotate.mock.calls.length)
+    expect(photoContexts).toHaveLength(entries.length)
+    photoContexts.forEach((context, index) => {
+      expect(context.drawImage.mock.calls[0][0]).toBe(entries[index].photo.source)
+      expect(context.rotate).toHaveBeenCalledWith(entries[index].crop.rotation * Math.PI / 180)
+      expect(context.getImageData).toHaveBeenCalledWith(0, 0, dimensions.photoRects[index].width, dimensions.photoRects[index].height)
+    })
+    dimensions.photoRects.forEach((rect) => expect(contexts[0].drawImage.mock.calls.some((call) => call.length === 3 && call[1] === rect.x && call[2] === rect.y)).toBe(true))
+    expect(entries.every((entry) => vi.mocked(entry.photo.dispose).mock.calls.length === 0)).toBe(true)
+  })
+
+  it.each(layouts)('keeps all caption and wedding text above the inner rule in every %s frame', async (layout) => {
+    const dimensions = renderer.getBoothLayout(layout)
+    const photoBottom = Math.max(...dimensions.photoRects.map((rect) => rect.y + rect.height))
+    for (const frame of ['ivory', 'airmail', 'clouds'] as const) {
+      for (const celebration of ['both', 'solemnisation', 'reception'] as const) {
+        const contextIndex = contexts.length
+        await renderer.drawPhotobooth(document.createElement('canvas'), boothPhotos(), boothSettings({
+          layout, frame, celebration, caption: 'One beautiful day, so many memories, our favourite people',
+        }))
+        const output = contexts[contextIndex]
+        const [borderX, borderY, borderWidth, borderHeight] = output.strokeRect.mock.calls[0]
+        const bottomRule = borderY + borderHeight
+        expect(output.textRuns.length).toBeGreaterThanOrEqual(3)
+        output.textRuns.forEach((run) => {
+          // Include conservative ascender/descender extents, not only text baselines.
+          expect(run.y - run.fontSize).toBeGreaterThan(photoBottom)
+          expect(run.y + run.fontSize * 0.3).toBeLessThan(bottomRule - 12)
+          expect(run.x - run.maxWidth / 2).toBeGreaterThan(borderX)
+          expect(run.x + run.maxWidth / 2).toBeLessThan(borderX + borderWidth)
+        })
+        const name = output.textRuns.find((run) => run.text === 'Aleem & Nurulain')!
+        const date = output.textRuns.find((run) => run.text.includes('AUGUST 2027'))!
+        expect(name.y + name.fontSize * 0.2).toBeLessThan(date.y - date.fontSize)
+        const captions = output.textRuns.filter((run) => run !== name && run !== date)
+        expect(captions.length).toBeLessThanOrEqual(2)
+        expect(captions.map((run) => run.text).join(' ')).toBe('One beautiful day, so many memories, our favourite people')
+      }
+    }
+  })
+
+  it('allows incomplete previews but rejects incomplete exports before reading any sources', async () => {
+    const entries = boothPhotos()
+    const incomplete = [entries[0], null, entries[2]]
+    const canvas = document.createElement('canvas')
+    await renderer.drawPhotobooth(canvas, incomplete, boothSettings())
+    expect(contexts.filter((context) => context.rotate.mock.calls.length)).toHaveLength(2)
+    expect(canvas.width).toBe(900)
+    await expect(renderer.exportPhotobooth(incomplete, boothSettings())).rejects.toMatchObject({ code: 'incomplete' })
+    await expect(renderer.exportPhotobooth([], boothSettings({ layout: 'single' }))).rejects.toMatchObject({ code: 'incomplete' })
+    expect(HTMLCanvasElement.prototype.toBlob).not.toHaveBeenCalled()
+  })
+
+  it('snapshots slot order and crops while optional assets load', async () => {
+    deferAssets = true
+    const entries = boothPhotos()
+    const first = entries[0].photo
+    const drawing = renderer.drawPhotobooth(document.createElement('canvas'), entries, boothSettings())
+    entries[0].crop.rotation = 180
+    entries.reverse()
+    pendingAssets[0]()
+    await drawing
+    const drawn = contexts.filter((context) => context.rotate.mock.calls.length)
+    expect(drawn[0].drawImage.mock.calls[0][0]).toBe(first.source)
+    expect(drawn[0].rotate).toHaveBeenCalledWith(0)
+  })
+
+  it('never lets a delayed four-photo layout overwrite a newer single preview', async () => {
+    deferAssets = true
+    const canvas = document.createElement('canvas')
+    const old = renderer.drawPhotobooth(canvas, boothPhotos(), boothSettings({ frame: 'clouds' }))
+    const recent = renderer.drawPolaroid(canvas, photo(), settings({ caption: 'Current single' }))
+    pendingAssets[0]()
+    await recent
+    pendingAssets[1]()
+    await old
+    expect(canvas.width).toBe(1200)
+    expect(canvas.height).toBe(1500)
+    expect(contexts.filter((context) => context.rotate.mock.calls.length)).toHaveLength(1)
+    expect(contexts[0].textRuns.some((run) => run.text === 'Current single')).toBe(true)
   })
 })

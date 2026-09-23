@@ -351,11 +351,13 @@ Approved photos are browsed through separate display derivatives, so their origi
 
 ## Quality checks
 
-### Polaroid keepsake studio
+### Wedding photo booth
 
-`/polaroid` is the in-browser photo booth, linked from the gallery header and front page. Guests can choose a local JPG, PNG, WebP or HEIC photo (up to 25 MB), or take a camera photo with a cancellable countdown. They can choose an ivory, airmail or cloud frame; adjust crop, zoom and rotation; add a short caption and celebration date; and save a 1200 × 1500 PNG.
+`/photobooth` is the in-browser wedding photo booth, linked from the gallery header and front page; old `/polaroid` links redirect there. A session takes four camera photos with a fresh three-second countdown for each. Guests can also choose up to four local JPG, PNG, WebP or HEIC photos (up to 25 MB each), add them individually, replace or retake one frame, reorder the set, and adjust each photo's crop, zoom and rotation. Switching layouts preserves the full set and its edits.
 
-Photos remain local during editing and export. **Add to gallery** passes the finished framed PNG into the existing approval flow as a new photo. It does not upload the unframed source automatically or fetch existing gallery originals. Existing upload limits, media records and the original download-release date are unchanged. The camera closes on capture, cancel or navigation. The studio does not persist unfinished edits after leaving the page.
+Choose a classic four-shot strip (900 × 2700), a four-frame grid (1600 × 1900), or a single Polaroid (1200 × 1500). Ivory, airmail and cloud frames include the original wedding monogram, a short optional caption and celebration date. All required slots must be filled before saving the PNG. The date and wedding names remain above the bottom frame rule.
+
+Photos remain local during editing and export. **Add to gallery** passes the finished framed PNG into the existing approval flow as a new photo. It does not upload the unframed sources automatically or fetch existing gallery originals. Existing upload limits, media records and the original download-release date are unchanged. The camera remains active between shots and closes after the final capture, cancellation or navigation. Cancelled sessions discard partial captures. The studio does not persist unfinished edits after leaving the page.
 
 See [design references](docs/DESIGN_REFERENCES.md) and [generated asset provenance](docs/POLAROID_ASSETS.md). A connected browser and physical device are still needed to verify real camera permission/playback behaviour visually.
 

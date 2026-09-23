@@ -26,7 +26,8 @@ function RoutedContent() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/gallery" element={<HomePage />} />
-          <Route path="/polaroid" element={<PolaroidPage />} />
+          <Route path="/photobooth" element={<PolaroidPage />} />
+          <Route path="/polaroid" element={<Navigate to="/photobooth" replace />} />
           <Route path="/guestbook" element={<Navigate to="/gallery" replace />} />
           <Route path="/live" element={<LivePage />} />
           <Route path="/qr" element={<QrPage />} />

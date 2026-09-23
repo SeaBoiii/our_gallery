@@ -1,14 +1,33 @@
-import type { LoadedPhoto, PhotoGeometry, PolaroidSettings } from './types'
+import type { BoothLayout, BoothLayoutGeometry, BoothPhoto, BoothSettings, LoadedPhoto, PhotoCrop, PhotoGeometry, PhotoRect, PolaroidSettings } from './types'
 
 export const POLAROID_WIDTH = 1200
 export const POLAROID_HEIGHT = 1500
 export const PHOTO_RECT = Object.freeze({ x: 72, y: 72, width: 1056, height: 1056 })
 export const MAX_PHOTO_BYTES = 25 * 1024 * 1024
-export const MAX_PHOTO_DIMENSION = 4096
+// A four-photo replacement can briefly retain eight sources; bound retained rasters
+// while keeping enough source detail for 3× cropping in the strip and grid layouts.
+export const MAX_PHOTO_DIMENSION = 2400
 export const MAX_CAPTION_LENGTH = 60
 export const DEFAULT_POLAROID_SETTINGS: PolaroidSettings = {
   frame: 'ivory', caption: '', celebration: 'both', finish: 'original',
   zoom: 1, positionX: 0, positionY: 0, rotation: 0,
+}
+export const DEFAULT_PHOTO_CROP: PhotoCrop = { zoom: 1, positionX: 0, positionY: 0, rotation: 0 }
+export const DEFAULT_BOOTH_SETTINGS: BoothSettings = {
+  layout: 'strip', frame: 'ivory', caption: '', celebration: 'both', finish: 'original',
+}
+
+export function getBoothLayout(layout: BoothLayout): BoothLayoutGeometry {
+  if (layout === 'single') return { width: POLAROID_WIDTH, height: POLAROID_HEIGHT, photoRects: [{ ...PHOTO_RECT }] }
+  if (layout === 'grid') return {
+    width: 1600, height: 1900,
+    photoRects: [{ x: 80, y: 80, width: 700, height: 700 }, { x: 820, y: 80, width: 700, height: 700 },
+      { x: 80, y: 820, width: 700, height: 700 }, { x: 820, y: 820, width: 700, height: 700 }],
+  }
+  return {
+    width: 900, height: 2700,
+    photoRects: [60, 651, 1242, 1833].map((y) => ({ x: 72, y, width: 756, height: 567 })),
+  }
 }
 
 const INK = '#081b31'
@@ -23,7 +42,7 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
 const finite = (value: number, fallback: number) => Number.isFinite(value) ? value : fallback
 
 export class PolaroidError extends Error {
-  readonly code: 'format' | 'size' | 'decode' | 'canvas' | 'export'
+  readonly code: 'format' | 'size' | 'decode' | 'canvas' | 'export' | 'incomplete'
 
   constructor(code: PolaroidError['code'], message: string) {
     super(message)
@@ -32,35 +51,49 @@ export class PolaroidError extends Error {
   }
 }
 
-export function normalizeSettings(settings: PolaroidSettings): PolaroidSettings {
+export function normalizePhotoCrop(crop: PhotoCrop): PhotoCrop {
   return {
+    zoom: clamp(finite(crop.zoom, 1), 1, 3),
+    positionX: clamp(finite(crop.positionX, 0), -1, 1),
+    positionY: clamp(finite(crop.positionY, 0), -1, 1),
+    rotation: [0, 90, 180, 270].includes(crop.rotation) ? crop.rotation : 0,
+  }
+}
+
+export function normalizeBoothSettings(settings: BoothSettings): BoothSettings {
+  return {
+    layout: ['strip', 'grid', 'single'].includes(settings.layout) ? settings.layout : 'strip',
     frame: ['ivory', 'airmail', 'clouds'].includes(settings.frame) ? settings.frame : 'ivory',
     caption: Array.from(String(settings.caption ?? '').replace(/\s+/gu, ' ').trim()).slice(0, MAX_CAPTION_LENGTH).join(''),
     celebration: ['both', 'solemnisation', 'reception'].includes(settings.celebration) ? settings.celebration : 'both',
     finish: ['original', 'warm', 'mono'].includes(settings.finish) ? settings.finish : 'original',
-    zoom: clamp(finite(settings.zoom, 1), 1, 3),
-    positionX: clamp(finite(settings.positionX, 0), -1, 1),
-    positionY: clamp(finite(settings.positionY, 0), -1, 1),
-    rotation: [0, 90, 180, 270].includes(settings.rotation) ? settings.rotation : 0,
   }
 }
 
+export function normalizeSettings(settings: PolaroidSettings): PolaroidSettings {
+  const { frame, caption, celebration, finish } = normalizeBoothSettings({ ...settings, layout: 'single' })
+  return { frame, caption, celebration, finish, ...normalizePhotoCrop(settings) }
+}
+
 /** Center-cover geometry; panning always remains inside the rotated image. */
-export function getPhotoGeometry(width: number, height: number, settings: PolaroidSettings): PhotoGeometry {
+export function getPhotoGeometry(width: number, height: number, settings: PhotoCrop, rect: PhotoRect = PHOTO_RECT): PhotoGeometry {
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
     throw new PolaroidError('decode', 'This photo has invalid dimensions. Please choose another image.')
   }
-  const normalized = normalizeSettings(settings)
+  if (!Number.isFinite(rect.width) || !Number.isFinite(rect.height) || rect.width <= 0 || rect.height <= 0) {
+    throw new PolaroidError('canvas', 'The selected photo layout has invalid dimensions.')
+  }
+  const normalized = normalizePhotoCrop(settings)
   const sideways = normalized.rotation === 90 || normalized.rotation === 270
   const rotatedWidth = sideways ? height : width
   const rotatedHeight = sideways ? width : height
-  const scale = Math.max(PHOTO_RECT.width / rotatedWidth, PHOTO_RECT.height / rotatedHeight) * normalized.zoom
+  const scale = Math.max(rect.width / rotatedWidth, rect.height / rotatedHeight) * normalized.zoom
   const rotatedDrawWidth = rotatedWidth * scale
   const rotatedDrawHeight = rotatedHeight * scale
-  const panLimitX = Math.max(0, (rotatedDrawWidth - PHOTO_RECT.width) / 2)
-  const panLimitY = Math.max(0, (rotatedDrawHeight - PHOTO_RECT.height) / 2)
-  const cropWidth = PHOTO_RECT.width / scale
-  const cropHeight = PHOTO_RECT.height / scale
+  const panLimitX = Math.max(0, (rotatedDrawWidth - rect.width) / 2)
+  const panLimitY = Math.max(0, (rotatedDrawHeight - rect.height) / 2)
+  const cropWidth = Math.min(rotatedWidth, rect.width / scale)
+  const cropHeight = Math.min(rotatedHeight, rect.height / scale)
   return {
     scale,
     imageDrawWidth: width * scale,
@@ -82,8 +115,13 @@ export function getPhotoGeometry(width: number, height: number, settings: Polaro
 
 /** Positive deltas move the photograph right/down, measured in the 1200×1500 output. */
 export function positionDelta(photo: LoadedPhoto, settings: PolaroidSettings, dx: number, dy: number) {
-  const normalized = normalizeSettings(settings)
-  const geometry = getPhotoGeometry(photo.width, photo.height, normalized)
+  return boothPositionDelta(photo, settings, PHOTO_RECT, dx, dy)
+}
+
+/** Panning is independent per slot, in output-canvas pixels, after rotation. */
+export function boothPositionDelta(photo: LoadedPhoto, crop: PhotoCrop, rect: PhotoRect, dx: number, dy: number) {
+  const normalized = normalizePhotoCrop(crop)
+  const geometry = getPhotoGeometry(photo.width, photo.height, normalized, rect)
   return {
     positionX: geometry.panLimitX > 0.0001 ? clamp(normalized.positionX + finite(dx, 0) / geometry.panLimitX, -1, 1) : 0,
     positionY: geometry.panLimitY > 0.0001 ? clamp(normalized.positionY + finite(dy, 0) / geometry.panLimitY, -1, 1) : 0,
@@ -271,119 +309,139 @@ function drawCover(context: CanvasRenderingContext2D, image: HTMLImageElement, x
     sourceWidth, sourceHeight, x, y, width, height)
 }
 
-function drawFrame(context: CanvasRenderingContext2D, frame: PolaroidSettings['frame'], clouds: HTMLImageElement | null) {
+function footerStart(layout: BoothLayoutGeometry) {
+  return Math.max(...layout.photoRects.map((rect) => rect.y + rect.height))
+}
+
+function drawFrame(context: CanvasRenderingContext2D, frame: BoothSettings['frame'], clouds: HTMLImageElement | null, layout: BoothLayoutGeometry) {
+  const { width, height } = layout
+  const unit = Math.min(1, width / POLAROID_WIDTH)
+  const footerTop = footerStart(layout)
   context.fillStyle = PAPER
-  context.fillRect(0, 0, POLAROID_WIDTH, POLAROID_HEIGHT)
+  context.fillRect(0, 0, width, height)
   if (frame === 'clouds' && clouds) {
-    drawCover(context, clouds, 0, 0, POLAROID_WIDTH, POLAROID_HEIGHT)
+    drawCover(context, clouds, 0, 0, width, height)
     // Keep the caption legible without covering the decorative outer margins.
-    const wash = context.createLinearGradient(0, 1140, 0, 1500)
+    const wash = context.createLinearGradient(0, footerTop, 0, height)
     wash.addColorStop(0, '#f7f2e820')
     wash.addColorStop(0.45, '#f7f2e8b8')
     wash.addColorStop(1, '#f7f2e870')
     context.fillStyle = wash
-    context.fillRect(72, 1140, 1056, 360)
+    context.fillRect(60 * unit, footerTop, width - 120 * unit, height - footerTop)
   }
   if (frame === 'airmail') {
     context.save()
     context.beginPath()
-    context.rect(18, 18, 1164, 1464)
-    context.rect(37, 37, 1126, 1426)
+    context.rect(18 * unit, 18 * unit, width - 36 * unit, height - 36 * unit)
+    context.rect(37 * unit, 37 * unit, width - 74 * unit, height - 74 * unit)
     context.clip('evenodd')
-    context.lineWidth = 25
-    for (let index = -1500; index < 2700; index += 60) {
-      context.strokeStyle = (index / 60) % 2 === 0 ? INK : GOLD
+    context.lineWidth = 25 * unit
+    for (let index = -Math.ceil(height / (60 * unit)); index < Math.ceil(width / (60 * unit)); index += 1) {
+      context.strokeStyle = index % 2 === 0 ? INK : GOLD
       context.beginPath()
-      context.moveTo(index, 0)
-      context.lineTo(index + 1500, 1500)
+      context.moveTo(index * 60 * unit, 0)
+      context.lineTo(index * 60 * unit + height, height)
       context.stroke()
     }
     context.restore()
   }
   context.strokeStyle = '#b79b6570'
   context.lineWidth = 1
-  context.strokeRect(48.5, 48.5, 1103, 1403)
+  const inset = 48 * unit + 0.5
+  context.strokeRect(inset, inset, width - inset * 2, height - inset * 2)
 }
 
-function drawPhoto(context: CanvasRenderingContext2D, photo: LoadedPhoto | null, settings: PolaroidSettings) {
-  const { x, y, width, height } = PHOTO_RECT
+function drawPhoto(context: CanvasRenderingContext2D, entry: BoothPhoto | null, finish: BoothSettings['finish'], rect: PhotoRect) {
+  const { x, y, width, height } = rect
   context.fillStyle = '#e9e5dd'
   context.fillRect(x, y, width, height)
-  if (photo) {
+  if (entry) {
+    const { photo } = entry
+    const crop = normalizePhotoCrop(entry.crop)
     const layer = makeCanvas(width, height)
-    const photoContext = contextFor(layer, settings.finish !== 'original')
-    const geometry = getPhotoGeometry(photo.width, photo.height, settings)
-    photoContext.imageSmoothingEnabled = true
-    photoContext.imageSmoothingQuality = 'high'
-    photoContext.translate(width / 2 + geometry.offsetX, height / 2 + geometry.offsetY)
-    photoContext.rotate(settings.rotation * Math.PI / 180)
-    photoContext.drawImage(photo.source, -geometry.imageDrawWidth / 2, -geometry.imageDrawHeight / 2,
-      geometry.imageDrawWidth, geometry.imageDrawHeight)
-    if (settings.finish !== 'original') {
-      const pixels = photoContext.getImageData(0, 0, width, height)
-      applyPhotoFinish(pixels.data, settings.finish)
-      photoContext.putImageData(pixels, 0, 0)
+    try {
+      const photoContext = contextFor(layer, finish !== 'original')
+      const geometry = getPhotoGeometry(photo.width, photo.height, crop, rect)
+      photoContext.imageSmoothingEnabled = true
+      photoContext.imageSmoothingQuality = 'high'
+      photoContext.translate(width / 2 + geometry.offsetX, height / 2 + geometry.offsetY)
+      photoContext.rotate(crop.rotation * Math.PI / 180)
+      photoContext.drawImage(photo.source, -geometry.imageDrawWidth / 2, -geometry.imageDrawHeight / 2,
+        geometry.imageDrawWidth, geometry.imageDrawHeight)
+      if (finish !== 'original') {
+        const pixels = photoContext.getImageData(0, 0, width, height)
+        applyPhotoFinish(pixels.data, finish)
+        photoContext.putImageData(pixels, 0, 0)
+      }
+      context.drawImage(layer, x, y)
+    } finally {
+      layer.width = 0
+      layer.height = 0
     }
-    context.drawImage(layer, x, y)
-    layer.width = 0
-    layer.height = 0
   }
   context.strokeStyle = '#081b3118'
   context.lineWidth = 1
   context.strokeRect(x + 0.5, y + 0.5, width - 1, height - 1)
 }
 
-function drawFooter(context: CanvasRenderingContext2D, settings: PolaroidSettings, monogram: HTMLImageElement | null, serif: string) {
+function drawFooter(context: CanvasRenderingContext2D, settings: BoothSettings, monogram: HTMLImageElement | null, serif: string, layout: BoothLayoutGeometry) {
+  const center = layout.width / 2
+  const unit = Math.min(1, layout.width / POLAROID_WIDTH)
+  const top = footerStart(layout)
   context.textAlign = 'center'
   context.textBaseline = 'alphabetic'
   context.fillStyle = INK
-  const captionWidth = 984
-  let captionSize = 52
+  const captionWidth = Math.round(layout.width * 0.82)
+  let captionSize = 52 * unit
   let lines: string[] = []
-  while (captionSize >= 20) {
+  while (captionSize >= 20 * unit) {
     context.font = `400 ${captionSize}px ${serif}`
     lines = fitCaptionLines(settings.caption, captionWidth, (text) => context.measureText(text).width)
     if (lines.length || !settings.caption) break
-    captionSize -= 2
+    captionSize -= 2 * unit
   }
   if (!lines.length && settings.caption) lines = [settings.caption]
   // maxWidth remains a final guard for unusual font metrics or unsupported glyphs.
-  lines.forEach((line, index) => context.fillText(line, 600, lines.length === 1 ? 1220 : 1193 + index * 55, captionWidth))
+  lines.forEach((line, index) => context.fillText(line, center, top + (lines.length === 1 ? 86 : 58 + index * 55) * unit, captionWidth))
   context.strokeStyle = GOLD
   context.lineWidth = 1
   context.beginPath()
-  context.moveTo(494, 1280.5)
-  context.lineTo(706, 1280.5)
+  context.moveTo(center - 106 * unit, top + 142 * unit)
+  context.lineTo(center + 106 * unit, top + 142 * unit)
   context.stroke()
   if (monogram) {
-    const height = 79
+    const height = 68 * unit
     const width = height * monogram.naturalWidth / monogram.naturalHeight
-    context.drawImage(monogram, 600 - width / 2, 1301, width, height)
+    context.drawImage(monogram, center - width / 2, top + 158 * unit, width, height)
   }
-  context.font = `400 39px ${serif}`
-  context.fillText('Aleem & Nurulain', 600, 1421, 760)
+  context.font = `400 ${39 * unit}px ${serif}`
+  context.fillText('Aleem & Nurulain', center, top + 270 * unit, layout.width * 0.76)
   const labels = {
     both: '21–22 AUGUST 2027 · SINGAPORE',
     solemnisation: '21 AUGUST 2027 · NIKAH & BRIDE’S RECEPTION',
     reception: '22 AUGUST 2027 · GROOM’S RECEPTION',
   }
-  context.font = `400 16px ${MONO_FONT}`
+  context.font = `400 ${16 * unit}px ${MONO_FONT}`
   context.fillStyle = '#5b6672'
-  context.fillText(labels[settings.celebration], 600, 1454, 960)
+  // The date's baseline and descenders stay above the inner rule in every layout.
+  context.fillText(labels[settings.celebration], center, top + 299 * unit, layout.width * 0.8)
 }
 
 const renderVersions = new WeakMap<HTMLCanvasElement, number>()
 
 /** Preview and export share this renderer. Superseded/aborted draws never overwrite the canvas. */
-export async function drawPolaroid(
+export async function drawPhotobooth(
   canvas: HTMLCanvasElement,
-  photo: LoadedPhoto | null,
-  settings: PolaroidSettings,
+  photos: readonly (BoothPhoto | null)[],
+  settings: BoothSettings,
   options: { signal?: AbortSignal } = {},
 ): Promise<void> {
   const version = (renderVersions.get(canvas) ?? 0) + 1
   renderVersions.set(canvas, version)
-  const normalized = normalizeSettings(settings)
+  const normalized = normalizeBoothSettings(settings)
+  const layout = getBoothLayout(normalized.layout)
+  // Snapshot slot order/crops before awaiting assets; caller-owned settings stay mutable.
+  const entries = layout.photoRects.map((_, index) => photos[index] ? { photo: photos[index].photo, crop: normalizePhotoCrop(photos[index].crop) } : null)
   const current = () => !options.signal?.aborted && renderVersions.get(canvas) === version
   if (!current()) return
   const [monogram, serif, clouds] = await Promise.all([
@@ -392,23 +450,31 @@ export async function drawPolaroid(
     normalized.frame === 'clouds' ? loadAsset('/polaroid-clouds.png').then((image) => image ?? loadAsset('/journal-sky.webp')) : null,
   ])
   if (!current()) return
-  const output = makeCanvas(POLAROID_WIDTH, POLAROID_HEIGHT)
-  const context = contextFor(output)
-  drawFrame(context, normalized.frame, clouds)
-  drawPhoto(context, photo, normalized)
-  drawFooter(context, normalized, monogram, serif)
-  if (!current()) return
-  canvas.width = POLAROID_WIDTH
-  canvas.height = POLAROID_HEIGHT
-  contextFor(canvas).drawImage(output, 0, 0)
-  output.width = 0
-  output.height = 0
+  const output = makeCanvas(layout.width, layout.height)
+  try {
+    const context = contextFor(output)
+    drawFrame(context, normalized.frame, clouds, layout)
+    layout.photoRects.forEach((rect, index) => drawPhoto(context, entries[index], normalized.finish, rect))
+    drawFooter(context, normalized, monogram, serif, layout)
+    if (!current()) return
+    canvas.width = layout.width
+    canvas.height = layout.height
+    contextFor(canvas).drawImage(output, 0, 0)
+  } finally {
+    output.width = 0
+    output.height = 0
+  }
 }
 
-export async function exportPolaroid(photo: LoadedPhoto, settings: PolaroidSettings): Promise<Blob> {
-  const canvas = makeCanvas(POLAROID_WIDTH, POLAROID_HEIGHT)
+export async function exportPhotobooth(photos: readonly (BoothPhoto | null)[], settings: BoothSettings): Promise<Blob> {
+  const normalized = normalizeBoothSettings(settings)
+  const layout = getBoothLayout(normalized.layout)
+  if (layout.photoRects.some((_, index) => !photos[index]?.photo)) {
+    throw new PolaroidError('incomplete', 'Please add a photo to every space before saving your keepsake.')
+  }
+  const canvas = makeCanvas(layout.width, layout.height)
   try {
-    await drawPolaroid(canvas, photo, settings)
+    await drawPhotobooth(canvas, photos, normalized)
     return await new Promise<Blob>((resolve, reject) => {
       canvas.toBlob((blob) => {
         if (blob) resolve(blob)
@@ -422,4 +488,13 @@ export async function exportPolaroid(photo: LoadedPhoto, settings: PolaroidSetti
     canvas.width = 0
     canvas.height = 0
   }
+}
+
+/** Compatibility wrappers keep the original single-photo API on the shared renderer. */
+export function drawPolaroid(canvas: HTMLCanvasElement, photo: LoadedPhoto | null, settings: PolaroidSettings, options: { signal?: AbortSignal } = {}) {
+  return drawPhotobooth(canvas, [photo ? { photo, crop: normalizePhotoCrop(settings) } : null], { ...settings, layout: 'single' }, options)
+}
+
+export function exportPolaroid(photo: LoadedPhoto, settings: PolaroidSettings): Promise<Blob> {
+  return exportPhotobooth([{ photo, crop: normalizePhotoCrop(settings) }], { ...settings, layout: 'single' })
 }

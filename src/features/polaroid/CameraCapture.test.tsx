@@ -23,12 +23,22 @@ function deferred<T>() {
 const getUserMedia = vi.fn<MediaDevices['getUserMedia']>()
 const context = { translate: vi.fn(), scale: vi.fn(), drawImage: vi.fn() }
 
-async function renderCamera() {
+async function renderCamera(options: { shotCount?: 1 | 4; useOnComplete?: boolean } = {}) {
   const onCapture = vi.fn()
+  const onComplete = vi.fn()
   const onClose = vi.fn()
-  const result = render(<LocaleProvider><CameraCapture onCapture={onCapture} onClose={onClose} /></LocaleProvider>)
+  const result = render(<LocaleProvider><CameraCapture shotCount={options.shotCount} onComplete={options.shotCount === 4 || options.useOnComplete ? onComplete : undefined} onCapture={onCapture} onClose={onClose} /></LocaleProvider>)
   await act(async () => { await Promise.resolve() })
-  return { ...result, onCapture, onClose }
+  return { ...result, onCapture, onComplete, onClose }
+}
+
+function fileText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = () => reject(reader.error)
+    reader.readAsText(file)
+  })
 }
 
 describe('CameraCapture', () => {
@@ -236,5 +246,137 @@ describe('CameraCapture', () => {
     expect(getUserMedia).not.toHaveBeenCalled()
     expect(screen.getByRole('alert')).toHaveTextContent('Kamera tidak tersedia dalam pelayar ini')
     expect(screen.getByRole('button', { name: 'Tutup kamera' })).toBeEnabled()
+  })
+
+  it('takes four separate frames with a fresh three-second countdown for each and delivers the ordered set together', async () => {
+    vi.useFakeTimers()
+    const encoders: BlobCallback[] = []
+    vi.mocked(HTMLCanvasElement.prototype.toBlob).mockImplementation((callback) => { encoders.push(callback) })
+    const { stream, tracks } = makeStream()
+    getUserMedia.mockResolvedValue(stream)
+    const view = await renderCamera({ shotCount: 4 })
+    const video = view.container.querySelector('video')!
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start 4-photo session' }))
+    for (let shot = 1; shot <= 4; shot += 1) {
+      expect(screen.getByText(`Photo ${shot} of 4`)).toBeVisible()
+      expect(screen.getByRole('status', { name: 'Photo in 3' })).toHaveTextContent('3')
+      expect(view.container.querySelectorAll('.camera-shot-indicator.is-complete')).toHaveLength(shot - 1)
+      await act(async () => { vi.advanceTimersByTime(1000) })
+      expect(screen.getByRole('status', { name: 'Photo in 2' })).toHaveTextContent('2')
+      await act(async () => { vi.advanceTimersByTime(1000) })
+      expect(screen.getByRole('status', { name: 'Photo in 1' })).toHaveTextContent('1')
+      expect(context.drawImage).toHaveBeenCalledTimes(shot - 1)
+      await act(async () => { vi.advanceTimersByTime(1000) })
+      expect(context.drawImage).toHaveBeenCalledTimes(shot)
+      expect(view.onComplete).not.toHaveBeenCalled()
+      expect(view.onCapture).not.toHaveBeenCalled()
+
+      if (shot < 4) {
+        expect(video.srcObject).toBe(stream)
+        tracks.forEach((track) => expect(track.stop).not.toHaveBeenCalled())
+      }
+      // Encoding is asynchronous in a browser: the next timer must wait for this frame.
+      await act(async () => { vi.advanceTimersByTime(1000) })
+      expect(context.drawImage).toHaveBeenCalledTimes(shot)
+      await act(async () => { encoders[shot - 1](new Blob([`pose-${shot}`], { type: 'image/jpeg' })) })
+    }
+
+    expect(getUserMedia).toHaveBeenCalledTimes(1)
+    expect(view.onComplete).toHaveBeenCalledTimes(1)
+    expect(view.onCapture).not.toHaveBeenCalled()
+    const files = view.onComplete.mock.calls[0][0] as File[]
+    expect(files).toHaveLength(4)
+    expect(new Set(files).size).toBe(4)
+    expect(files.map((file) => file.name)).toEqual(['wedding-photo-1.jpg', 'wedding-photo-2.jpg', 'wedding-photo-3.jpg', 'wedding-photo-4.jpg'])
+    expect(files.every((file) => file.type === 'image/jpeg')).toBe(true)
+    tracks.forEach((track) => expect(track.stop).toHaveBeenCalledTimes(1))
+    expect(video.srcObject).toBeNull()
+    vi.useRealTimers()
+    expect(await Promise.all(files.map(fileText))).toEqual(['pose-1', 'pose-2', 'pose-3', 'pose-4'])
+  })
+
+  it('discards a partially captured session when cancelled between photos', async () => {
+    vi.useFakeTimers()
+    const { stream, tracks } = makeStream()
+    getUserMedia.mockResolvedValue(stream)
+    const view = await renderCamera({ shotCount: 4 })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start 4-photo session' }))
+    await act(async () => { vi.advanceTimersByTime(7000) })
+    expect(context.drawImage).toHaveBeenCalledTimes(2)
+    expect(screen.getByText('Photo 3 of 4')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel session' }))
+    await act(async () => { vi.advanceTimersByTime(15000) })
+
+    expect(context.drawImage).toHaveBeenCalledTimes(2)
+    expect(view.onCapture).not.toHaveBeenCalled()
+    expect(view.onComplete).not.toHaveBeenCalled()
+    expect(view.onClose).toHaveBeenCalledTimes(1)
+    tracks.forEach((track) => expect(track.stop).toHaveBeenCalledTimes(1))
+  })
+
+  it('does not restart a cancelled session when a pending frame finishes encoding', async () => {
+    vi.useFakeTimers()
+    let finishEncoding!: BlobCallback
+    vi.mocked(HTMLCanvasElement.prototype.toBlob).mockImplementation((callback) => { finishEncoding = callback })
+    const { stream, tracks } = makeStream()
+    getUserMedia.mockResolvedValue(stream)
+    const view = await renderCamera({ shotCount: 4 })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start 4-photo session' }))
+    await act(async () => { vi.advanceTimersByTime(3000) })
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel session' }))
+    await act(async () => {
+      finishEncoding(new Blob(['cancelled-pose'], { type: 'image/jpeg' }))
+      vi.advanceTimersByTime(15000)
+    })
+
+    expect(context.drawImage).toHaveBeenCalledTimes(1)
+    expect(view.onComplete).not.toHaveBeenCalled()
+    expect(view.onCapture).not.toHaveBeenCalled()
+    tracks.forEach((track) => expect(track.stop).toHaveBeenCalledTimes(1))
+  })
+
+  it('stops and discards an incomplete set after encoding fails, then retries from the first photo', async () => {
+    vi.useFakeTimers()
+    const firstCamera = makeStream()
+    const retryCamera = makeStream()
+    getUserMedia.mockResolvedValueOnce(firstCamera.stream).mockResolvedValueOnce(retryCamera.stream)
+    vi.mocked(HTMLCanvasElement.prototype.toBlob)
+      .mockImplementationOnce((callback) => callback(new Blob(['discarded-first-pose'], { type: 'image/jpeg' })))
+      .mockImplementationOnce((callback) => callback(null))
+    const view = await renderCamera({ shotCount: 4 })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start 4-photo session' }))
+    await act(async () => { vi.advanceTimersByTime(6000) })
+    expect(screen.getByRole('alert')).toHaveTextContent('We couldn’t take that photo')
+    firstCamera.tracks.forEach((track) => expect(track.stop).toHaveBeenCalledTimes(1))
+    expect(view.onComplete).not.toHaveBeenCalled()
+    expect(view.container.querySelectorAll('.camera-shot-indicator.is-complete')).toHaveLength(0)
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Try camera again' })) })
+    expect(screen.getByText('Photo 1 of 4')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Start 4-photo session' }))
+    await act(async () => { vi.advanceTimersByTime(12000) })
+    expect(view.onComplete).toHaveBeenCalledTimes(1)
+    const files = view.onComplete.mock.calls[0][0] as File[]
+    expect(files).toHaveLength(4)
+    retryCamera.tracks.forEach((track) => expect(track.stop).toHaveBeenCalledTimes(1))
+    vi.useRealTimers()
+    expect(await Promise.all(files.map(fileText))).toEqual(['photo', 'photo', 'photo', 'photo'])
+  })
+
+  it('supports the completion callback for a single retake without also firing the legacy callback', async () => {
+    vi.useFakeTimers()
+    getUserMedia.mockResolvedValue(makeStream().stream)
+    const view = await renderCamera({ shotCount: 1, useOnComplete: true })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Take photo' }))
+    await act(async () => { vi.advanceTimersByTime(3000) })
+
+    expect(view.onComplete).toHaveBeenCalledTimes(1)
+    expect(view.onComplete.mock.calls[0][0]).toHaveLength(1)
+    expect(view.onCapture).not.toHaveBeenCalled()
   })
 })
