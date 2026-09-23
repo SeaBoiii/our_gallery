@@ -1,6 +1,6 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { GalleryPage } from '../../shared/contracts'
+import type { GalleryMedia, GalleryPage } from '../../shared/contracts'
 import { LocaleProvider } from '../context/LocaleContext'
 import { mockGallery } from '../data/mock'
 import { publicConfig, TestVisibilityProvider } from '../test/visibility'
@@ -147,5 +147,150 @@ describe('live wall presentation and controls', () => {
     expect(await screen.findByRole('img', { name: mockGallery[2].guestMessage! })).toBeInTheDocument()
     expect(screen.queryByRole('img', { name: mockGallery[0].guestMessage! })).not.toBeInTheDocument()
     expect(api.getGallery).toHaveBeenLastCalledWith({ event: 'reception', limit: 50 })
+  })
+})
+
+describe('live travel journal layouts', () => {
+  const photo = (id: string, day: 'solemnisation' | 'reception' = 'solemnisation'): GalleryMedia => ({
+    ...mockGallery[0], id, event: mockGallery[day === 'solemnisation' ? 0 : 2].event,
+    guestMessage: `A memory named ${id}`, displayUrl: `/display/${id}.webp`, thumbnailUrl: `/thumbnail/${id}.webp`,
+  })
+  const first = photo('first')
+  const second = photo('second')
+  const third = photo('third')
+  const newest = photo('newest')
+  const receptionFirst = photo('reception-first', 'reception')
+  const receptionSecond = photo('reception-second', 'reception')
+  const scraps = () => Array.from(document.querySelectorAll<HTMLImageElement>('.live-scrap img'))
+  const scrapUrls = () => scraps().map(image => image.getAttribute('src'))
+  const tick = async (milliseconds = 0) => { await act(async () => vi.advanceTimersByTimeAsync(milliseconds)) }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.spyOn(Math, 'random').mockReturnValue(0)
+    vi.stubGlobal('Image', class { complete = true; naturalWidth = 1200; src = ''; onload = null; onerror = null })
+    api.getGallery.mockReset().mockResolvedValue({ items: [first, second, third], nextCursor: null })
+    api.getLiveConfig.mockReset().mockResolvedValue({ source: 'all' })
+  })
+
+  it('visits six distinct layouts only when the slideshow advances and then wraps to the first', async () => {
+    render(tree('solemnisation'))
+    await tick()
+    const wall = screen.getByRole('main')
+    expect(wall).toHaveClass('live-layout-0')
+    for (let advance = 1; advance <= 6; advance += 1) {
+      const previousLayout = `live-layout-${(advance - 1) % 6}`
+      const previousPhoto = document.querySelector('.live-media img')!.getAttribute('src')
+      // A gallery poll can refresh the preload timer, so follow the real pending
+      // timers until the next advance instead of assuming a fixed polling phase.
+      for (let timer = 0; timer < 5 && wall.classList.contains(previousLayout); timer += 1) {
+        await act(async () => vi.advanceTimersToNextTimerAsync())
+      }
+      expect(wall).toHaveClass(`live-layout-${advance % 6}`)
+      expect(document.querySelector('.live-media img')).not.toHaveAttribute('src', previousPhoto)
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Pause slideshow' }))
+    await tick(40_000)
+    expect(wall).toHaveClass('live-layout-0')
+  })
+
+  it('freezes companion identities and order while paused even when polling inserts and reorders photos', async () => {
+    render(tree('solemnisation'))
+    await tick()
+    expect(scrapUrls()).toEqual([second.thumbnailUrl, third.thumbnailUrl])
+    const originalScraps = scraps()
+    fireEvent.click(screen.getByRole('button', { name: 'Pause slideshow' }))
+    api.getGallery.mockResolvedValue({ items: [newest, { ...first }, { ...third }, { ...second }], nextCursor: null })
+    await tick(20_000)
+    expect(document.querySelector('.live-media img')).toHaveAttribute('src', first.displayUrl)
+    expect(scrapUrls()).toEqual([second.thumbnailUrl, third.thumbnailUrl])
+    expect(scraps()[0]).toBe(originalScraps[0])
+    expect(scraps()[1]).toBe(originalScraps[1])
+    expect(screen.getByRole('main')).toHaveClass('live-layout-0')
+    for (const image of scraps()) {
+      expect(image).toHaveAttribute('alt', '')
+      expect(image.closest('.live-scrap')).toHaveAttribute('aria-hidden', 'true')
+    }
+    expect(within(screen.getByRole('region', { name: 'The live memory wall' })).getAllByRole('img')).toHaveLength(1)
+  })
+
+  it('removes revoked companions on a paused refresh without filling their places with new photos', async () => {
+    render(tree('solemnisation'))
+    await tick()
+    fireEvent.click(screen.getByRole('button', { name: 'Pause slideshow' }))
+    api.getGallery.mockResolvedValue({ items: [first, third, newest], nextCursor: null })
+    await tick(20_000)
+    expect(scrapUrls()).toEqual([third.thumbnailUrl])
+    expect(scrapUrls()).not.toContain(newest.thumbnailUrl)
+    api.getGallery.mockResolvedValue({ items: [first, newest], nextCursor: null })
+    await tick(20_000)
+    expect(scraps()).toHaveLength(0)
+    expect(document.querySelector('.live-media img')).toHaveAttribute('src', first.displayUrl)
+    expect(screen.getByRole('button', { name: 'Resume slideshow' })).toBeInTheDocument()
+  })
+
+  it('clears companion photos immediately on day-policy changes and when visibility becomes unavailable', async () => {
+    api.getGallery.mockResolvedValue({ items: [first, second, receptionFirst], nextCursor: null })
+    const view = render(tree('both'))
+    await tick()
+    expect(scrapUrls()).toContain(second.thumbnailUrl)
+    fireEvent.click(screen.getByRole('button', { name: 'Pause slideshow' }))
+    api.getGallery.mockResolvedValue({ items: [first, second, receptionFirst, receptionSecond], nextCursor: null })
+    view.rerender(tree('reception'))
+    expect(scraps()).toHaveLength(0)
+    expect(document.querySelector('.live-media')).not.toBeInTheDocument()
+    await tick()
+    expect(document.querySelector('.live-media img')).toHaveAttribute('src', receptionFirst.displayUrl)
+    expect(scrapUrls()).toEqual([receptionSecond.thumbnailUrl])
+    view.rerender(tree(null))
+    expect(scraps()).toHaveLength(0)
+    expect(document.querySelector('.live-media')).not.toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('The gallery is temporarily unavailable')
+  })
+
+  it('clears companions on a source switch and ignores a late response from the previous source', async () => {
+    api.getGallery.mockResolvedValue({ items: [first, second, receptionFirst, receptionSecond], nextCursor: null })
+    render(tree('both'))
+    await tick()
+    expect(scrapUrls()).toContain(second.thumbnailUrl)
+    fireEvent.click(screen.getByRole('button', { name: 'Pause slideshow' }))
+    let resolveOldPage!: (page: GalleryPage) => void
+    api.getGallery.mockReturnValueOnce(new Promise<GalleryPage>(resolve => { resolveOldPage = resolve }))
+    await tick(20_000)
+    fireEvent.click(screen.getByRole('button', { name: '22 August' }))
+    expect(scraps()).toHaveLength(0)
+    await tick()
+    expect(scrapUrls()).toEqual([receptionSecond.thumbnailUrl])
+    expect(document.querySelector('.live-media img')).toHaveAttribute('src', receptionFirst.displayUrl)
+    await act(async () => resolveOldPage({ items: [first, second, third], nextCursor: null }))
+    expect(scrapUrls()).toEqual([receptionSecond.thumbnailUrl])
+    expect(document.querySelector('.live-media img')).toHaveAttribute('src', receptionFirst.displayUrl)
+  })
+
+  it('uses only thumbnail photos for companions and never creates an extra video player', async () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue()
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined)
+    const mainVideo = { ...mockGallery[3], id: 'main-video' }
+    const otherVideo = { ...mockGallery[7], id: 'other-video' }
+    api.getGallery.mockResolvedValue({ items: [mainVideo, first, otherVideo, second, third], nextCursor: null })
+    render(tree('both'))
+    await tick()
+    expect(document.querySelectorAll('video')).toHaveLength(1)
+    expect(document.querySelector('.live-media video')).toHaveAttribute('src', mainVideo.displayUrl)
+    expect(scrapUrls()).toEqual([first.thumbnailUrl, second.thumbnailUrl])
+    expect(document.querySelector('.live-scrap video')).not.toBeInTheDocument()
+    expect(scrapUrls()).not.toContain(first.displayUrl)
+  })
+
+  it('shows a single approved photo once without companion duplicates or layout advances during polling', async () => {
+    api.getGallery.mockResolvedValue({ items: [first], nextCursor: null })
+    render(tree('solemnisation'))
+    await tick()
+    expect(scraps()).toHaveLength(0)
+    await tick(60_000)
+    expect(document.querySelectorAll('.live-media img')).toHaveLength(1)
+    expect(document.querySelector('.live-media img')).toHaveAttribute('src', first.displayUrl)
+    expect(scraps()).toHaveLength(0)
+    expect(screen.getByRole('main')).toHaveClass('live-layout-0')
   })
 })

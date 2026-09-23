@@ -35,6 +35,14 @@ No reference-site photography or illustrations were copied. Preview and PNG cont
 
 Validation: 381 tests across 45 files, lint, the frontend production build and Worker dry-run build pass. Fifty-seven native PNG exports matched preview pixels exactly; contact sheets and the complete strip were inspected. Automated checks include stable-URL image retries, focus/navigation, source filtering, paused rotation, reduced-motion video playback and fullscreen failure recovery. This release changes frontend presentation only.
 
+## Scattered live journal
+
+The live wall now cycles through six composed arrangements instead of keeping the photograph in one fixed column. A dominant complete photograph or video sits among up to two smaller guest-photo prints, with tape, offset paper, a route line, a Singapore postmark and an ivory journal note. The visual references are [Canva's travel scrapbook layouts](https://www.canva.com/scrapbooks/templates/travel/), [Artifact Uprising's travel scrapbook](https://www.artifactuprising.com/photo-books/custom-photo-scrapbook-album/travel) and [Pic-Time's multi-image storytelling](https://www.pic-time.com/features/slideshows). No third-party imagery is used; the decorative details are CSS and SVG.
+
+Each slide keeps its arrangement and companion selection through background polling and pause. Companion IDs are resolved against the latest approved, visible source on every render so deleted, rejected or hidden photographs disappear. Companions use lightweight thumbnails and cannot play extra videos. The main image remains uncropped; videos remain upright. QR and controls have a separate stable area, and mobile uses a staggered flowing layout. All animation respects reduced motion. Browser preview remained unavailable; automated interaction and static layout checks do not substitute for browser screenshots.
+
+Journal validation: 388 tests across 45 files, lint and the production build pass. Fifteen live-wall tests cover six-layout cycling, pause/polling stability, companion removal, source/day transitions, late responses, single photos and videos. Independent geometry review checked rotation clearance and caption placement, including 24 aspect-ratio/viewport combinations for the closest spread.
+
 ## Scope and validation
 
 The home page and administration are gallery-only. Old `/guestbook` links redirect to `/gallery`; the public greeting API is retired. Historical data and migrations remain intact. Media uploads, approval, original files, day associations and the original download-release date remain in place.

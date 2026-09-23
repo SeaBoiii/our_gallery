@@ -12,6 +12,28 @@ import { WeddingMonogram } from '../components/WeddingMonogram'
 import { eventDateLabel, galleryDateLabel } from '../utils/date'
 
 type Source = 'all' | EventSlug
+const JOURNAL_LAYOUTS = 6
+
+function LiveScrap({ item, position }: { item: GalleryMedia; position: number }) {
+  const [failed, setFailed] = useState(false)
+  if (failed) return null
+  return <figure className={`live-scrap live-scrap--${position}`} aria-hidden="true">
+    <img src={item.thumbnailUrl || item.displayUrl} alt="" decoding="async" onError={() => setFailed(true)} />
+    <figcaption>A <i>&amp;</i> N <span>·</span> {String(position + 1).padStart(2, '0')}</figcaption>
+  </figure>
+}
+
+/** Freeze a spread's selection while it is on screen, but never retain revoked media. */
+function LiveCompanions({ items, currentId, recent }: { items: GalleryMedia[]; currentId: string; recent: string[] }) {
+  const [ids] = useState(() => {
+    const eligible = new Set(items.filter(item => item.mediaType === 'photo' && item.id !== currentId).map(item => item.id))
+    return [...new Set([...recent].reverse().concat([...eligible]))].filter(id => eligible.has(id)).slice(0, 2)
+  })
+  return ids.map((id, position) => {
+    const item = items.find(candidate => candidate.id === id && candidate.mediaType === 'photo' && candidate.id !== currentId)
+    return item ? <LiveScrap key={`${id}:${item.thumbnailUrl || item.displayUrl}`} item={item} position={position} /> : null
+  })
+}
 
 const wallCopy = {
   en: { wedding: 'Our Wedding', wall: 'The live memory wall', pause: 'Pause slideshow', resume: 'Resume slideshow', paused: 'Slideshow paused', share: 'A little of your day. A part of our story.', forever: 'Forever', controls: 'Slideshow controls', fullscreenError: 'Fullscreen could not be opened. You can continue viewing here.' },
@@ -93,7 +115,7 @@ function ConfiguredLivePage({ config }: { config: PublicGalleryConfig }) {
   const [items, setItems] = useState<GalleryMedia[]>([])
   const [source, setSource] = useState<Source>(config.mode === 'both' ? 'all' : config.mode)
   const [current, setCurrent] = useState<GalleryMedia | null>(null)
-  const [layout, setLayout] = useState(0)
+  const [layout, setLayout] = useState({ index: 0, recent: [] as string[] })
   const [error, setError] = useState<string | null>(null)
   const [fullscreen, setFullscreen] = useState(Boolean(document.fullscreenElement))
   const [paused, setPaused] = useState(() => Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches))
@@ -129,6 +151,7 @@ function ConfiguredLivePage({ config }: { config: PublicGalleryConfig }) {
     sourceRef.current = nextSource
     refreshSequence.current += 1
     recent.current = []
+    setLayout({ index: 0, recent: [] })
     setSource(nextSource)
     setItems([])
     setCurrent(null)
@@ -161,9 +184,10 @@ function ConfiguredLivePage({ config }: { config: PublicGalleryConfig }) {
       void nextReady.then((next) => {
         if (cancelled || !next || sequence !== refreshSequence.current) return
         const historySize = Math.min(8, Math.max(1, items.length - 1))
-        recent.current = [...recent.current, current.id].slice(-historySize)
+        const history = [...recent.current, current.id].slice(-historySize)
+        recent.current = history
         setCurrent(next)
-        setLayout((value) => (value + 1) % 3)
+        setLayout((value) => ({ index: (value.index + 1) % JOURNAL_LAYOUTS, recent: history }))
       })
     }, current.mediaType === 'video' ? 16_000 : 9_000)
 
@@ -202,7 +226,7 @@ function ConfiguredLivePage({ config }: { config: PublicGalleryConfig }) {
   }
 
   return (
-    <main className={`live-wall live-layout-${layout}`}>
+    <main className={`live-wall live-layout-${layout.index}`}>
       <div className="live-sky" aria-hidden="true" />
       <header className="live-header">
         <LiveBrand config={config} />
@@ -217,7 +241,10 @@ function ConfiguredLivePage({ config }: { config: PublicGalleryConfig }) {
 
       <div className="live-stage">
       {current ? (
-        <section className="live-memory" key={current.id} aria-label={w.wall}>
+        <section className={`live-memory${current.mediaType === 'video' ? ' live-memory--video' : ''}`} key={current.id} aria-label={w.wall}>
+          <svg className="live-journal-route" viewBox="0 0 1000 700" preserveAspectRatio="none" fill="none" aria-hidden="true"><path d="M65 560C150 655 440 610 390 440S660 70 855 145C965 190 905 350 825 300S940 50 970 75" /><circle cx="65" cy="560" r="6" /><circle cx="970" cy="75" r="6" /></svg>
+          <div className="live-postmark" aria-hidden="true"><span>SINGAPORE</span><Plane strokeWidth={1} /><span>{w.forever}</span></div>
+          <LiveCompanions items={items} currentId={current.id} recent={layout.recent} />
           <figure className="live-media">
             {current.mediaType === 'video' ? <video ref={videoRef} src={current.displayUrl} poster={current.thumbnailUrl} autoPlay={!paused} muted loop playsInline preload="auto" aria-label={current.guestMessage || `${t.memoryFrom} ${eventDateLabel(current.event.slug, locale)}`} /> : <img src={current.displayUrl} alt={current.guestMessage || `${t.memoryFrom} ${eventDateLabel(current.event.slug, locale)}`} />}
             <figcaption><span>{t.memoryLog}</span><Plane size={13} aria-hidden="true" /><span>A &amp; N</span></figcaption>
