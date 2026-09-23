@@ -1,0 +1,52 @@
+﻿/* Shared stationery treatment across utility views. */
+.upload-dialog,.qr-card,.qr-card--compact { border-radius: 4px; }
+.upload-overlay { background: #081b31b3; }
+.upload-header,.upload-progress-steps,.upload-footer { background: var(--paper); }
+.upload-progress-steps { grid-template-columns: repeat(4,1fr); }
+.upload-progress-steps > span { color: var(--muted); font-size: .64rem; }
+.upload-progress-steps b { font-weight: 500; }
+.upload-body .guest-fields { margin-top: 24px; }
+.guest-fields input,.guest-fields textarea,.media-picker-actions button,.queue-item,.queue-preview,.upload-errors,.event-selector,.success-ticket { border-radius: 3px; }
+.event-selector { background: var(--ink); border-color: var(--line); box-shadow: none; }
+.event-selector > button[aria-checked="true"],.event-selector > button:hover { background: #c4a3671f; }
+.event-selector button[aria-checked="true"] .event-check { color: var(--ink); }
+.departure-label { color: #d8d9d9; }
+.event-selector small { color: #c1c8d0; }
+.event-gate { color: var(--metal); }
+.event-selector strong { font-size: 1.2rem; }
+.step-intro { font-family: inherit; font-size: .85rem; line-height: 1.7; }
+.file-limits,.moderation-note { color: var(--muted); font-size: .73rem; line-height: 1.65; }
+.file-limits { margin: 15px 0 24px; }
+.success-ticket { grid-template-columns: auto auto; text-align: left; }
+.success-ticket strong { font-size: 1.2rem; }
+.media-picker-actions button > svg { border-radius: 3px; }
+.upload-header button { border-radius: 3px; }
+.upload-body section > h2 { letter-spacing: -.02em; line-height: 1.02; }
+.qr-card::before,.qr-card::after { display: none; }
+.qr-code-frame,.qr-card--compact .qr-code-frame { border-radius: 3px; box-shadow: none; }
+.qr-card { border-top: 4px solid var(--metal); }
+.qr-card h2 { letter-spacing: -.025em; }
+.lightbox { background: var(--ink); }
+.lightbox-bar { background: #061527d9; }
+.lightbox-media,.lightbox-content figcaption,.lightbox-media-status,.lightbox-toast { border-radius: 3px; }
+.lightbox-content figcaption,.lightbox-media-status { background: #081b31df; }
+.live-wall { background: var(--ink); }
+.live-wall::before { background: linear-gradient(140deg,#112d4a,#081b31 70%); }
+.live-clouds { background-image: url('/journal-sky.webp'); animation: none; opacity: .045; }
+.live-media img,.live-media video,.live-media::before,.live-brand-mark,.live-layout-2 .live-caption { border-radius: 3px; }
+.live-caption .eyebrow { color: #ddc699; }
+.live-layout-2 .live-caption,.live-footer { background: #081b31df; }
+.live-controls > div,.live-controls button,.live-qr .qr-card--compact,.live-qr .qr-card--compact .qr-code-frame { border-radius: 3px; }
+.live-empty > .eyebrow { color: var(--metal); }
+.admin-page { background: var(--ivory); }
+.admin-login-card,.admin-login-card label > div,.stats-grid article,.stats-grid article svg,.storage-card,.settings-card,.moderation-grid article,.moderation-pagination,.moderation-notice,.admin-toast,.batch-bar,.refresh-button,.moderation-toolbar select,.admin-filter-group,.admin-filter-group button,.live-source-options button,.admin-sidebar nav button,.admin-sidebar-footer a,.admin-sidebar-footer button { border-radius: 3px; box-shadow: none; }
+.admin-login-card { border-top: 3px solid var(--metal); }
+.admin-sidebar nav button[aria-current="page"] { box-shadow: none; }
+.admin-brand strong { font-size: 1.2rem; }
+.admin-section-heading h1 { letter-spacing: -.025em; }
+@media (max-width: 560px) {
+  .upload-dialog { border-radius: 8px 8px 0 0; }
+  .upload-progress-steps b { display: block; font-size: .56rem; }
+  .event-selector strong { font-size: 1.05rem; }
+  .guest-fields input,.guest-fields textarea { font-size: 16px; }
+}

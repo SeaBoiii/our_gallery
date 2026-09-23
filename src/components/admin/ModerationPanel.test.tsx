@@ -43,7 +43,7 @@ describe('moderation panel', () => {
     render(<ModerationPanel />)
 
     expect(await screen.findByText('first.jpg · 1 KB · Derivatives: ready')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Load more arrivals' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Load more memories' }))
 
     expect(await screen.findByText('second.jpg · 1 KB · Derivatives: ready')).toBeInTheDocument()
     expect(api.getAdminMedia).toHaveBeenLastCalledWith({ status: 'pending', event: undefined, type: undefined, cursor: 'next-page' })

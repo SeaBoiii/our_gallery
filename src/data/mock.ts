@@ -1,7 +1,7 @@
 import type { AdminMedia, AdminStats, GalleryEvent, GalleryMedia, GallerySettings } from '../../shared/contracts'
 
 export const mockEvents: GalleryEvent[] = [
-  { id: 'event-solemnisation', slug: 'solemnisation', name: 'solemnisation', eventDate: '2027-08-21', displayName: 'Solemnisation', uploadEnabled: true },
+  { id: 'event-solemnisation', slug: 'solemnisation', name: 'solemnisation', eventDate: '2027-08-21', displayName: 'Nikah & Bride’s Reception', uploadEnabled: true },
   { id: 'event-reception', slug: 'reception', name: 'reception', eventDate: '2027-08-22', displayName: "Groom's Reception", uploadEnabled: true },
 ]
 

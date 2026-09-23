@@ -1,8 +1,29 @@
-# Aleem × Nurul — Flight Memories
+# Aleem & Nurulain — Our Wedding Collection
 
-A production-oriented, browser-first wedding guest photo and video gallery for 21–22 August 2027. Guests can scan one QR code, take or choose media, add an optional name and message, upload without an account, and browse approved memories. The same site also provides a full-screen live wall, printable QR card, and a separate moderation console.
+A browser-first wedding photo, video and written-greeting collection for 21–22 August 2027. Guests can scan one QR code, take or choose media, add an optional name and message, upload without an account, leave a standalone wish, and browse approved memories and greetings. The same site also provides a full-screen live wall, printable QR card, and a separate moderation console.
 
 The frontend is static React + Vite on GitHub Pages. The API is a Cloudflare Worker backed by private R2 storage and D1 metadata.
+
+
+## Wedding journal revamp
+
+The gallery uses the current Our Flight design language: navy, ivory and gold, the original A/N monogram, and locally hosted Instrument Serif (license in `public/fonts/`). `/` and `/gallery` show media; `/guestbook` shows approved written wishes. Media sharing has two input steps: choose files, then confirm the celebration and optional guest details.
+
+Albums retain their stable IDs: `solemnisation` is **21 August — Nikah & Bride’s Reception**, and `reception` is **22 August — Groom’s Reception**. Existing uploads and captions keep their associations.
+
+### Moderated guestbook
+
+Greetings are wedding-wide, plain text, and separate from media: optional name (80 characters), required message (1–1,000 characters). Every new greeting is pending until an administrator approves it. The separate Greetings tab supports approval, rejection, deletion, counts and pagination; the independent **Guest greetings** setting closes new submissions. Greeting counts never affect media counts or storage.
+
+The additive `0003_greetings.sql` migration creates the table, corrects the day-one display label and disables media auto-approval at launch. Deleted greetings retain a request/session/intent tombstone while clearing their text and name. Identical retries return the original receipt; conflicting intent or session returns 409.
+
+Verification uses Turnstile action `greeting_submit`; existing uploads retain `upload_prepare`. Greeting submission limits are 5 per browser session and 300 per IP in 10 minutes. Public reads expose only approved entries. Development previews use a stateful guestbook mock to exercise submit → moderate → publish → delete; it is never used in production.
+
+### Release order
+
+Run lint, the full test suite, frontend build and Worker dry-run build. Apply the additive D1 migration and deploy the Worker first; verify `GET /api/greetings` with the configured Origin before releasing the frontend. The previous frontend is compatible with the added API/table. Rollback the application version if needed without deleting the guestbook table or media.
+
+The new migration and route tests run against real in-memory SQLite using Node 24’s `node:sqlite`. Browser visual review and a rehearsal on guests’ actual devices remain useful before the wedding.
 
 ## Architecture
 
@@ -308,6 +329,12 @@ GET    /api/gallery/download-status
 GET    /api/gallery/:id
 GET    /api/gallery/:id/download
 GET    /api/live/config
+GET    /api/greetings
+POST   /api/greetings
+GET    /api/admin/greetings
+GET    /api/admin/greetings/stats
+PATCH  /api/admin/greetings/batch
+DELETE /api/admin/greetings/:id
 
 POST   /api/admin/login
 POST   /api/admin/logout

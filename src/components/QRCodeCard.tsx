@@ -10,7 +10,7 @@ export function QRCodeCard({ compact = false }: { compact?: boolean }) {
   const t = copy[locale].qr
   return (
     <section className={`qr-card${compact ? ' qr-card--compact' : ''}`} aria-label={t.aria}>
-      <div className="qr-card-brand"><WeddingMonogram compact={compact} /><span><strong>Aleem & Nurul</strong><small>{copy[locale].flightMemories}</small></span></div>
+      <div className="qr-card-brand"><WeddingMonogram compact={compact} /><span><strong>Aleem & Nurulain</strong><small>{copy[locale].flightMemories}</small></span></div>
       <div className="qr-code-frame">
         <QRCodeSVG value={PUBLIC_GALLERY_URL} size={compact ? 150 : 250} level="H" marginSize={1} bgColor="#fffefa" fgColor="#173c44" title={t.scanTitle} />
       </div>

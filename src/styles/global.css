@@ -7,13 +7,13 @@ button { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
 img { display: block; max-width: 100%; }
 a { color: inherit; }
-:focus-visible { outline: 3px solid #0b6170; outline-offset: 3px; }
+:focus-visible { outline: 3px solid var(--metal); outline-offset: 3px; }
 ::selection { color: #fff; background: var(--accent-deep); }
 .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0 0 0 0) !important; white-space: nowrap !important; border: 0 !important; }
-.eyebrow { margin: 0; color: var(--accent-deep); font-size: .64rem; font-weight: 850; letter-spacing: .2em; text-transform: uppercase; }
-.button { display: inline-flex; min-height: 50px; align-items: center; justify-content: center; gap: 9px; padding: 0 22px; border: 1px solid transparent; border-radius: 999px; font-size: .76rem; font-weight: 800; letter-spacing: .035em; transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease; }
+.eyebrow { margin: 0; color: var(--muted); font-family: var(--mono); font-size: .61rem; font-weight: 400; letter-spacing: .13em; text-transform: uppercase; }
+.button { display: inline-flex; min-height: 50px; align-items: center; justify-content: center; gap: 9px; padding: 0 22px; border: 1px solid transparent; border-radius: 3px; font-size: .76rem; font-weight: 600; letter-spacing: .015em; transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease; }
 .button:not(:disabled):hover { transform: translateY(-2px); }
-.button-primary { color: #fff; background: var(--accent-deep); box-shadow: 0 12px 28px rgba(53, 104, 121, .24); }
+.button-primary { color: var(--paper); background: var(--ink); }
 .route-loading { display: grid; min-height: 100svh; place-content: center; justify-items: center; gap: 16px; color: var(--muted); background: var(--ivory); }
 .route-loading p { margin: 0; font-family: var(--serif); }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }

@@ -33,12 +33,16 @@ export function UploadExperience({ open, initialFiles, onClose, onViewGallery }:
   const queueRef = useRef<UploadQueueItem[]>([])
   const [errors, setErrors] = useState<string[]>([])
   const [turnstileToken, setTurnstileToken] = useState('')
+  const [verificationVersion, setVerificationVersion] = useState(0)
+  const initialFilesConsumed = useRef<File[] | null>(null)
   const [online, setOnline] = useState(navigator.onLine)
   const chooserRef = useRef<HTMLInputElement>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
   const requestIdRef = useRef(crypto.randomUUID())
-  const activelyUploading = queue.some((item) => ['preparing','uploading','completing'].includes(item.state))
+  const operationRef = useRef(false)
+  const [operationActive, setOperationActive] = useState(false)
+  const activelyUploading = operationActive || queue.some((item) => ['preparing','uploading','completing'].includes(item.state))
   const hasUnfinishedSelection = queue.some((item) => item.state !== 'complete')
 
   const reset = useCallback(() => {
@@ -47,13 +51,14 @@ export function UploadExperience({ open, initialFiles, onClose, onViewGallery }:
     setGuestName('')
     setGuestMessage('')
     setEventSlug(getSingaporeEventDefault())
-    setTurnstileToken('')
+    setTurnstileToken(''); setVerificationVersion((value) => value + 1)
     requestIdRef.current = crypto.randomUUID()
     setErrors([])
     setStep(0)
   }, [])
   const handleClose = useCallback(() => {
-    if (step === 4) reset()
+    if (operationRef.current) return
+    if (step === 3) reset()
     onClose()
   }, [onClose, reset, step])
   const handleViewGallery = useCallback(() => {
@@ -106,8 +111,8 @@ export function UploadExperience({ open, initialFiles, onClose, onViewGallery }:
   }, [t.batchLimit, t.duplicateFile, t.photoTooLarge, t.unsupportedFile, t.videoTooLarge])
 
   useEffect(() => {
-    if (!open || !initialFiles.length) return
-    const timer = window.setTimeout(() => addFiles(initialFiles), 0)
+    if (!open || !initialFiles.length || initialFilesConsumed.current === initialFiles) return
+    const timer = window.setTimeout(() => { initialFilesConsumed.current = initialFiles; addFiles(initialFiles) }, 0)
     return () => window.clearTimeout(timer)
   }, [open, initialFiles, addFiles])
 
@@ -189,10 +194,10 @@ export function UploadExperience({ open, initialFiles, onClose, onViewGallery }:
 
   const restartPreparation = (message: string) => {
     requestIdRef.current = crypto.randomUUID()
-    setTurnstileToken('')
+    setTurnstileToken(''); setVerificationVersion((value) => value + 1)
     setErrors([message])
-    setQueue((items) => items.filter((item) => item.state !== 'complete').map((item) => ({ ...item, prepared: undefined, state: 'queued', progress: 0, error: undefined })))
-    setStep(2)
+    setQueue((items) => items.map((item) => item.state === 'complete' ? item : { ...item, prepared: undefined, state: 'queued', progress: 0, error: undefined }))
+    setStep(1)
   }
 
   const remove = (clientId: string) => setQueue((items) => {
@@ -227,13 +232,16 @@ export function UploadExperience({ open, initialFiles, onClose, onViewGallery }:
   }
 
   const startUpload = async () => {
-    if (!eventSlug || !queue.length || (!turnstileToken && !USE_MOCK_DATA)) return
+    if (operationRef.current) return
+    if (!eventSlug || !queue.some((item) => item.state !== 'complete') || (!turnstileToken && !USE_MOCK_DATA)) return
+    operationRef.current = true
+    setOperationActive(true)
     setErrors([])
-    setStep(3)
+    setStep(2)
     const preparedItems: UploadQueueItem[] = []
     let preparedByApi = false
     try {
-      for (const item of queue) {
+      for (const item of queue.filter((item) => item.state !== 'complete')) {
         updateItem(item.clientId, { state: 'preparing', error: undefined })
         let derivatives = item.derivatives
         if (item.mediaType === 'photo' && !derivatives.length) {
@@ -264,32 +272,35 @@ export function UploadExperience({ open, initialFiles, onClose, onViewGallery }:
       const response = await prepareUploads(payload)
       preparedByApi = true
       const ready = preparedItems.map((item) => ({ ...item, prepared: response.uploads.find((upload) => upload.clientId === item.clientId)! }))
-      setQueue(ready)
+      setQueue((items) => [...items.filter((item) => item.state === 'complete'), ...ready])
       const { failedIds, restarted } = await runConcurrent(ready)
-      if (!restarted) setStep(failedIds.length ? 3 : 4)
+      if (!restarted) setStep(failedIds.length ? 2 : 3)
     } catch (reason) {
       const message = localizedErrorMessage(reason)
       setErrors([message])
       if (!preparedByApi) {
         if (reason instanceof GalleryApiError && ['UPLOAD_AUTHORIZATION_EXPIRED','REQUEST_ID_CONFLICT'].includes(reason.code)) requestIdRef.current = crypto.randomUUID()
-        setTurnstileToken('')
+        setTurnstileToken(''); setVerificationVersion((value) => value + 1)
         setQueue((items) => items.map((item) => item.state === 'complete' ? item : { ...item, state: 'queued', progress: 0, error: undefined }))
-        setStep(2)
+        setStep(1)
       } else {
         setQueue((items) => items.map((item) => item.state === 'complete' ? item : { ...item, state: 'failed', error: message }))
       }
-    }
+    } finally { operationRef.current = false; setOperationActive(false) }
   }
 
   const retryOne = async (clientId: string) => {
+    if (operationRef.current) return
     const item = queue.find((candidate) => candidate.clientId === clientId)
-    if (!item) return
+    if (!item || item.state !== 'failed') return
+    operationRef.current = true
+    setOperationActive(true)
     updateItem(clientId, { state: 'uploading', error: undefined })
     try {
       await uploadQueueItem(item, (progress) => updateItem(clientId, { state: progress >= 100 ? 'completing' : 'uploading', progress }), { refreshBeforeUpload: true })
       setQueue((items) => {
         const next = items.map((candidate) => candidate.clientId === clientId ? { ...candidate, state: 'complete' as const, progress: 100, error: undefined } : candidate)
-        if (next.every((candidate) => candidate.state === 'complete')) window.setTimeout(() => setStep(4), 0)
+        if (next.every((candidate) => candidate.state === 'complete')) window.setTimeout(() => setStep(3), 0)
         return next
       })
     } catch (reason) {
@@ -298,68 +309,76 @@ export function UploadExperience({ open, initialFiles, onClose, onViewGallery }:
         return
       }
       updateItem(clientId, { state: 'failed', error: uploadErrorMessage(reason) })
-    }
+    } finally { operationRef.current = false; setOperationActive(false) }
   }
 
   const retryFailed = async () => {
+    if (operationRef.current) return
     const remaining = queue.filter((item) => item.state === 'failed')
-    const { failedIds, restarted } = await runConcurrent(remaining, true)
-    if (!restarted && !failedIds.length) setStep(4)
+    if (!remaining.length) return
+    operationRef.current = true
+    setOperationActive(true)
+    try {
+      const { failedIds, restarted } = await runConcurrent(remaining, true)
+      if (!restarted && !failedIds.length) setStep(3)
+    } finally { operationRef.current = false; setOperationActive(false) }
   }
 
   if (!open) return null
-  const canContinue = step === 0 ? Boolean(eventSlug) : step === 1 ? true : step === 2 ? queue.length > 0 && Boolean(turnstileToken || USE_MOCK_DATA) : false
+  const hasFilesToSend = queue.some((item) => item.state !== 'complete')
+  const canContinue = step === 0 ? hasFilesToSend : step === 1 ? Boolean(eventSlug) && hasFilesToSend && online && Boolean(turnstileToken || USE_MOCK_DATA) : false
+  const changeDetails = (update: () => void) => { requestIdRef.current = crypto.randomUUID(); update() }
 
   return (
     <div className="upload-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !activelyUploading) handleClose() }}>
       <div ref={dialogRef} className="upload-dialog" role="dialog" aria-modal="true" aria-labelledby="upload-title" tabIndex={-1}>
         <header className="upload-header">
-          <div><p>{t.checkIn}</p><span>AN-210827 · SIN</span></div>
+          <div><p>{t.checkIn}</p><span>ALEEM & NURULAIN · 21—22.08.2027</span></div>
           <button type="button" onClick={handleClose} disabled={activelyUploading} aria-label={t.close} data-modal-autofocus><X aria-hidden="true" /></button>
         </header>
-        <div className="upload-progress-steps" aria-label={`${t.step} ${step + 1} ${t.of} 5`}>
+        <div className="upload-progress-steps" aria-label={step < 2 ? `${t.step} ${step + 1} ${t.of} 2` : t.steps[step]}>
           {t.steps.map((label, index) => <span key={label} className={index <= step ? 'is-active' : ''}><i>{index < step ? <Check aria-hidden="true" size={10} /> : index + 1}</i><b>{label}</b></span>)}
         </div>
-        {!online ? <div className="offline-banner" role="status"><WifiOff aria-hidden="true" size={16} />{t.offline}</div> : null}
-
         <div className="upload-body">
-          {step === 0 ? <section><p className="eyebrow">{t.dayEyebrow}</p><h2 id="upload-title" data-modal-focus-recovery tabIndex={-1}>{t.chooseMoment}</h2><p className="step-intro">{t.chooseMomentBody}</p><EventSelector value={eventSlug} onChange={setEventSlug} events={availableEvents} /></section> : null}
-          {step === 1 ? (
-            <section><p className="eyebrow">{t.passengerEyebrow}</p><h2 id="upload-title" data-modal-focus-recovery tabIndex={-1}>{t.sharing}</h2><p className="step-intro">{t.sharingBody}</p>
-              <div className="guest-fields">
-                <label><span>{t.name}<small>{t.optional}</small></span><input value={guestName} maxLength={80} autoComplete="name" placeholder={t.namePlaceholder} onChange={(event) => setGuestName(event.target.value)} /></label>
-                <label><span>{t.message}<small>{t.optional}</small></span><textarea value={guestMessage} maxLength={280} rows={4} placeholder={t.messagePlaceholder} onChange={(event) => setGuestMessage(event.target.value)} /><em>{guestMessage.length}/280</em></label>
-              </div>
-            </section>
-          ) : null}
-          {step === 2 ? (
+          {!online ? <div className="offline-banner" role="status"><WifiOff aria-hidden="true" size={16} />{t.offline}</div> : null}
+          {step === 0 ? (
             <section><p className="eyebrow">{t.mediaEyebrow}</p><h2 id="upload-title" data-modal-focus-recovery tabIndex={-1}>{t.addMemories}</h2><p className="step-intro">{t.addMemoriesBody}</p>
               <div className="media-picker-actions">
                 <button type="button" onClick={() => cameraRef.current?.click()}><Camera aria-hidden="true" /><span><strong>{copy[locale].takePhoto}</strong><small>{t.useCamera}</small></span></button>
                 <button type="button" onClick={() => chooserRef.current?.click()}><ImagePlus aria-hidden="true" /><span><strong>{copy[locale].chooseMedia}</strong><small>{t.selectMultiple}</small></span></button>
               </div>
+              <p className="file-limits">{locale === 'en' ? 'Photos up to 25 MB · Videos up to 250 MB' : 'Foto sehingga 25 MB · Video sehingga 250 MB'}</p>
               {queue.length ? <div className="queue-summary"><span><strong>{queue.length}</strong> {t.selected}</span><span>{formatBytes(totalBytes)}</span></div> : null}
               <UploadQueue items={queue} canRemove onRemove={remove} />
-              <div className="verification"><p>{t.verification}</p><TurnstileWidget onToken={setTurnstileToken} onError={onTurnstileError} /></div>
             </section>
           ) : null}
-          {step === 3 ? (
+          {step === 1 ? (
+            <section><p className="eyebrow">{t.passengerEyebrow}</p><h2 id="upload-title" data-modal-focus-recovery tabIndex={-1}>{t.sharing}</h2><p className="step-intro">{t.sharingBody}</p>
+              <EventSelector value={eventSlug} onChange={(value) => changeDetails(() => setEventSlug(value))} events={availableEvents} />
+              <div className="guest-fields">
+                <label><span>{t.name}<small>{t.optional}</small></span><input value={guestName} maxLength={80} autoComplete="name" placeholder={t.namePlaceholder} onChange={(event) => changeDetails(() => setGuestName(event.target.value))} /></label>
+                <label><span>{t.message}<small>{t.optional}</small></span><textarea value={guestMessage} maxLength={280} rows={3} placeholder={t.messagePlaceholder} onChange={(event) => changeDetails(() => setGuestMessage(event.target.value))} /><em>{guestMessage.length}/280</em></label>
+              </div>
+              <p className="moderation-note">{locale === 'en' ? 'Your memories will appear in the gallery after approval.' : 'Kenangan anda akan dipaparkan dalam galeri selepas diluluskan.'}</p>
+              <div className="verification"><p>{t.verification}</p><TurnstileWidget resetKey={verificationVersion} onToken={setTurnstileToken} onError={onTurnstileError} />{!turnstileToken && !USE_MOCK_DATA ? <button className="back-button" type="button" onClick={() => { setErrors([]); setVerificationVersion((value) => value + 1) }}>{copy[locale].tryAgain}</button> : null}</div>
+            </section>
+          ) : null}
+          {step === 2 ? (
             <section><p className="eyebrow">{t.departureEyebrow}</p><h2 id="upload-title" data-modal-focus-recovery tabIndex={-1}>{t.checkingIn}</h2><p className="step-intro">{t.checkingInBody}</p>
               <div className="overall-progress" role="progressbar" aria-label={t.overallProgress} aria-valuemin={0} aria-valuemax={100} aria-valuenow={overallProgress}><span style={{ width: `${overallProgress}%` }} /><b>{overallProgress}%</b><Plane aria-hidden="true" style={{ left: `calc(${overallProgress}% - 9px)` }} /></div>
               <p className="upload-count">{completed} / {queue.length} {t.safelyCheckedIn}{failed ? ` · ${failed} ${t.needAttention}` : ''}</p>
-              <UploadQueue items={queue} canRemove={false} onRemove={remove} onRetry={(id) => void retryOne(id)} />
-              {failed ? <button type="button" className="button button-secondary retry-all" onClick={() => void retryFailed()}>{t.retry}</button> : null}
+              <UploadQueue items={queue} canRemove={false} onRemove={remove} onRetry={activelyUploading ? undefined : (id) => void retryOne(id)} />
+              {failed && !activelyUploading ? <button type="button" className="button button-secondary retry-all" onClick={() => void retryFailed()}>{t.retry}</button> : null}
             </section>
           ) : null}
-          {step === 4 ? (
-            <section className="upload-success"><div className="success-route"><Plane aria-hidden="true" /><span /><i /></div><p className="eyebrow">{t.completeEyebrow}</p><h2 id="upload-title" data-modal-focus-recovery tabIndex={-1}>{t.success} <span aria-hidden="true">✈︎</span></h2><p>{t.successBody}</p><div className="success-ticket"><span>{t.memoriesLabel}</span><strong>{completed}</strong><span>{t.statusLabel}</span><strong>{failed ? t.partial : t.safe}</strong></div><div className="success-actions"><button className="button button-primary" type="button" onClick={handleViewGallery}>{t.viewGallery}</button><button className="button button-secondary" type="button" onClick={reset}>{t.addMore}</button></div></section>
+          {step === 3 ? (
+            <section className="upload-success"><div className="success-route"><Plane aria-hidden="true" /><span /><i /></div><p className="eyebrow">{t.completeEyebrow}</p><h2 id="upload-title" data-modal-focus-recovery tabIndex={-1}>{t.success}</h2><p>{t.successBody}</p><div className="success-ticket"><span>{t.memoriesLabel}</span><strong>{completed}</strong><span>{t.statusLabel}</span><strong>{failed ? t.partial : t.safe}</strong></div><div className="success-actions"><button className="button button-primary" type="button" onClick={handleViewGallery}>{t.viewGallery}</button><button className="button button-secondary" type="button" onClick={reset}>{t.addMore}</button></div></section>
           ) : null}
           {errors.length ? <div className="upload-errors" role="alert">{errors.map((error) => <p key={error}>{error}</p>)}</div> : null}
         </div>
-
-        {step < 3 ? <footer className="upload-footer"><button type="button" className="back-button" onClick={() => step === 0 ? handleClose() : setStep(step - 1)}><ChevronLeft aria-hidden="true" />{t.back}</button><button type="button" className="button button-primary" disabled={!canContinue} onClick={() => step === 2 ? void startUpload() : setStep(step + 1)}>{step === 2 ? t.startUpload : t.continue}</button></footer> : null}
-        <input ref={cameraRef} className="visually-hidden" type="file" accept="image/*" capture="environment" tabIndex={-1} aria-hidden="true" onChange={(event) => { addFiles(Array.from(event.target.files || [])); event.currentTarget.value = '' }} />
-        <input ref={chooserRef} className="visually-hidden" type="file" accept="image/*,video/*" multiple tabIndex={-1} aria-hidden="true" onChange={(event) => { addFiles(Array.from(event.target.files || [])); event.currentTarget.value = '' }} />
+        {step < 2 ? <footer className="upload-footer"><button type="button" className="back-button" onClick={() => step === 0 ? handleClose() : setStep(0)}><ChevronLeft aria-hidden="true" />{t.back}</button><button type="button" className="button button-primary" disabled={!canContinue} onClick={() => step === 1 ? void startUpload() : setStep(1)}>{step === 1 ? t.startUpload : t.continue}</button></footer> : null}
+        <input ref={cameraRef} className="visually-hidden" type="file" aria-label={t.useCamera} accept="image/*" capture="environment" tabIndex={-1} aria-hidden="true" onChange={(event) => { addFiles(Array.from(event.target.files || [])); event.currentTarget.value = '' }} />
+        <input ref={chooserRef} className="visually-hidden" type="file" aria-label={t.selectMultiple} accept="image/*,video/*" multiple tabIndex={-1} aria-hidden="true" onChange={(event) => { addFiles(Array.from(event.target.files || [])); event.currentTarget.value = '' }} />
       </div>
     </div>
   )

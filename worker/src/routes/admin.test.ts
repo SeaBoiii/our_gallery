@@ -1,9 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { adminBatchMediaRoute, adminStatsRoute } from './admin'
+import { adminBatchMediaRoute, adminLogoutRoute, adminStatsRoute } from './admin'
 import { createAdminSession } from '../security/adminSession'
 import { fakeEnv } from '../../test/fake'
 
 describe('admin protection', () => {
+  it('clears already-invalid sessions on logout while enforcing the origin', async () => {
+    const request = new Request('https://api.test/api/admin/logout', { method: 'POST', headers: { Origin: 'http://localhost:5173', Cookie: 'an_admin_dev=expired-session' } })
+    const response = await adminLogoutRoute(request, fakeEnv())
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Set-Cookie')).toContain('Max-Age=0')
+    await expect(adminLogoutRoute(new Request('https://api.test/api/admin/logout', { method: 'POST', headers: { Origin: 'https://untrusted.test' } }), fakeEnv())).rejects.toMatchObject({ status: 403 })
+  })
+
   it('rejects unauthenticated admin requests', async () => {
     const request = new Request('https://api.test/api/admin/stats',{ headers:{ Origin:'http://localhost:5173' } })
     await expect(adminStatsRoute(request,fakeEnv())).rejects.toMatchObject({ code:'ADMIN_REQUIRED' })

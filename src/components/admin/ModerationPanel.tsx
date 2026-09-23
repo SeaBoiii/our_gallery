@@ -129,7 +129,7 @@ export function ModerationPanel() {
 
   return (
     <div className="moderation-panel">
-      <div className="admin-section-heading"><div><p className="eyebrow">Moderation</p><h1>Memory arrivals.</h1></div><p>Only approved memories can enter the public gallery or live wall.</p></div>
+      <div className="admin-section-heading"><div><p className="eyebrow">Photo & video review</p><h1>Wedding memories.</h1></div><p>Only approved memories appear in the public gallery or live wall.</p></div>
       <div className="moderation-toolbar">
         <div className="admin-filter-group">{(['pending','approved','rejected','all'] as const).map((status) => <button type="button" key={status} aria-pressed={filters.status === status} onClick={() => setFilters({ ...filters, status })} disabled={Boolean(mutation)}>{status}</button>)}</div>
         <select aria-label="Filter by celebration" value={filters.event} onChange={(event) => setFilters({ ...filters, event: event.target.value as Filters['event'] })} disabled={Boolean(mutation)}><option value="all">Both days</option><option value="solemnisation">Day 1</option><option value="reception">Day 2</option></select>
@@ -140,7 +140,7 @@ export function ModerationPanel() {
       {mutation ? <div className="moderation-notice" role="status"><LoaderCircle className="spin" aria-hidden="true" /><span>{mutation.label}</span></div> : null}
       {mutationError ? <div className="moderation-notice moderation-notice--error" role="alert"><TriangleAlert aria-hidden="true" /><span>{mutationError}</span><button type="button" onClick={() => setMutationError(null)}>Dismiss</button></div> : null}
       {error ? <div className="admin-state" role="alert">{error}</div> : null}
-      {loading ? <div className="admin-state"><LoaderCircle className="spin" aria-hidden="true" />Loading arrivals…</div> : null}
+      {loading ? <div className="admin-state"><LoaderCircle className="spin" aria-hidden="true" />Loading memories…</div> : null}
       {!loading && !error ? (
         <div className="moderation-grid" aria-busy={Boolean(mutation)}>
           {items.map((item) => (
@@ -154,7 +154,7 @@ export function ModerationPanel() {
         </div>
       ) : null}
       {!loading && !error && !items.length ? <div className="admin-state">No memories match these filters.</div> : null}
-      {!loading && !error && items.length ? <div className="moderation-pagination"><p>Showing {items.length.toLocaleString()} {items.length === 1 ? 'memory' : 'memories'}</p>{paginationError ? <span role="alert">{paginationError}</span> : null}{cursor ? <button type="button" className="button button-secondary" onClick={() => void load(cursor)} disabled={loadingMore || Boolean(mutation)}>{loadingMore ? <LoaderCircle className="spin" aria-hidden="true" /> : null}{loadingMore ? 'Loading more…' : paginationError ? 'Try loading more again' : 'Load more arrivals'}</button> : <small>End of the current results</small>}</div> : null}
+      {!loading && !error && items.length ? <div className="moderation-pagination"><p>Showing {items.length.toLocaleString()} {items.length === 1 ? 'memory' : 'memories'}</p>{paginationError ? <span role="alert">{paginationError}</span> : null}{cursor ? <button type="button" className="button button-secondary" onClick={() => void load(cursor)} disabled={loadingMore || Boolean(mutation)}>{loadingMore ? <LoaderCircle className="spin" aria-hidden="true" /> : null}{loadingMore ? 'Loading more…' : paginationError ? 'Try loading more again' : 'Load more memories'}</button> : <small>End of the current results</small>}</div> : null}
     </div>
   )
 }

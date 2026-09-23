@@ -1,5 +1,29 @@
 # Image assets
 
+## Current wedding journal assets — September 2026
+
+- **Social preview:** `public/og.png`, 1536 × 1024 PNG, generated with the built-in OpenAI imagegen tool and visually checked for correct text. The tool does not expose a selectable model version.
+- **Generation source:** `C:/Users/seabo/.codex/generated_images/01a0cca6-3964-70b0-9be2-81fbfb8c21d7/exec-9dfde279-780a-4b53-a67d-0bfded92d17a.png`.
+- **Journal sky:** `public/journal-sky.avif` and `public/journal-sky.webp`, copied unchanged from the user-owned sibling Our Flight sky-landscape assets.
+- **Fonts:** Instrument Serif regular and italic, copied with `OFL-InstrumentSerif.txt` into `public/fonts/`.
+- The original monogram is unchanged. Generated wedding sample imagery is used only in development previews.
+
+### Current social-card prompt (verbatim)
+
+```text
+Use case: ads-marketing.
+Asset type: wedding gallery social sharing card, landscape 1536x1024.
+Create one refined wedding travel-journal sharing card with a unified luxurious wedding album aesthetic. Left 60% tactile warm ivory stationery (#f7f2e8); right 40% a restrained atmospheric photograph of sunlit clouds viewed from above, open sky, subtle faded film warmth. No people. Use exceptionally legible midnight navy (#081b31) editorial typography, elegant Instrument Serif-like serif letterforms, and a thin muted gold (#c4a367) divider. Clean flat print design, ample margins, excellent readability at sharing-thumbnail size.
+Text exact, verbatim, once each:
+"ALEEM & NURULAIN"
+"OUR WEDDING COLLECTION"
+"Our day, through your eyes."
+"21 — 22 AUGUST 2027"
+Typography hierarchy: names are the principal element, the sentence headline is large serif italic, collection label and date are small clean sans serif. Keep all lettering within the ivory stationery area, confidently composed with generous breathing room. Preserve the exact spelling of NURULAIN: N U R U L A I N. The sentence ends with a period. The date uses an em dash.
+No additional words, no QR code, no logos, no invented monogram, no barcode, no watermark, no mock browser, no surrounding scene.
+```
+
+
 ## Aleem & Nurul monogram
 
 - `public/monogram-original.png` is the exact transparent 768 × 512 PNG supplied by the user.
@@ -14,7 +38,7 @@ The project uses one original image generated with OpenAI's built-in image-gener
 ## Saved files
 
 - Original generation: `C:\Users\seabo\.codex\generated_images\01a052b7-f1cd-70e2-baa5-9ba136a5f2bd\exec-aeee4557-7ca3-4bf8-a9a2-b518b4d10d93.png`
-- Social card: `public/og.png`
+- Original social card: replaced by the wedding journal card below; its development crops remain unchanged.
 - Development-only crops: `public/samples/sample-1.webp` through `public/samples/sample-4.webp`
 - Development video preview: `public/samples/sample-video.mp4` — a 4-second, silent H.264 baseline motion clip derived locally from generated `sample-4.webp`; no additional image-generation call or third-party footage was used.
 

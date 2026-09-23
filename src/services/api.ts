@@ -1,16 +1,22 @@
 import type {
+  AdminGreetingPage,
+  AdminGreetingStats,
   AdminMediaPage,
   AdminSession,
   AdminStats,
   ApiEnvelope,
   CompleteUploadRequest,
   CompleteUploadResponse,
+  CreateGreetingRequest,
+  CreateGreetingReceipt,
   EventSlug,
   GalleryEvent,
   GalleryDownloadResponse,
   GalleryDownloadStatus,
   GalleryPage,
   GallerySettings,
+  GreetingPage,
+  GreetingStatus,
   MediaStatus,
   PrepareUploadRequest,
   PrepareUploadResponse,
@@ -18,10 +24,12 @@ import type {
 } from '../../shared/contracts'
 import { API_BASE_URL, USE_MOCK_DATA } from '../config'
 import { mockAdminMedia, mockAdminStats, mockEvents, mockGallery, mockSettings } from '../data/mock'
+import { developmentGreetings, MockGreetingError } from '../data/greetings'
 
-let developmentSettings: GallerySettings = { ...mockSettings, events: mockSettings.events.map((event) => ({ ...event })) }
+let developmentSettings: GallerySettings = { ...mockSettings, greetingsEnabled: true, events: mockSettings.events.map((event) => ({ ...event })) }
 const developmentSettingsSnapshot = () => ({ ...developmentSettings, events: developmentSettings.events.map((event) => ({ ...event })) })
 const mockDownloadsAvailableAt = '2027-08-23T00:00:00+08:00'
+export const ADMIN_SESSION_EXPIRED_EVENT = 'gallery-admin-session-expired'
 
 export class GalleryApiError extends Error {
   code: string
@@ -37,14 +45,18 @@ export class GalleryApiError extends Error {
   }
 }
 
+let inMemoryBrowserSessionId: string | undefined
+
 function browserSessionId() {
+  if (inMemoryBrowserSessionId) return inMemoryBrowserSessionId
   const key = 'an-gallery-session'
-  let value = window.localStorage.getItem(key)
-  if (!value) {
-    value = crypto.randomUUID()
-    window.localStorage.setItem(key, value)
-  }
-  return value
+  try {
+    const saved = window.localStorage.getItem(key)
+    if (saved && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(saved)) inMemoryBrowserSessionId = saved
+  } catch { /* Private browsers can deny storage while still allowing API access. */ }
+  inMemoryBrowserSessionId ??= crypto.randomUUID()
+  try { window.localStorage.setItem(key, inMemoryBrowserSessionId) } catch { /* Keep a stable session in memory for safe retries. */ }
+  return inMemoryBrowserSessionId
 }
 
 async function request<T>(path: string, init: RequestInit = {}, retries = 0): Promise<T> {
@@ -63,6 +75,9 @@ async function request<T>(path: string, init: RequestInit = {}, retries = 0): Pr
       const body = await response.json().catch(() => null) as ApiEnvelope<T> | null
       if (!response.ok || !body?.ok) {
         const error = body && !body.ok ? body.error : null
+        if (response.status === 401 && path.startsWith('/api/admin/') && path !== '/api/admin/login') {
+          window.dispatchEvent(new Event(ADMIN_SESSION_EXPIRED_EVENT))
+        }
         throw new GalleryApiError(error?.message || 'We lost connection for a moment. Please try again.', error?.code || `HTTP_${response.status}`, error?.retryable ?? response.status >= 500, error?.details)
       }
       return body.data
@@ -201,6 +216,7 @@ export async function updateAdminSettings(settings: Partial<Omit<GallerySettings
       ...developmentSettings,
       ...(typeof settings.uploadsEnabled === 'boolean' ? { uploadsEnabled: settings.uploadsEnabled } : {}),
       ...(typeof settings.autoApproveUploads === 'boolean' ? { autoApproveUploads: settings.autoApproveUploads } : {}),
+      ...(typeof settings.greetingsEnabled === 'boolean' ? { greetingsEnabled: settings.greetingsEnabled } : {}),
       ...(settings.liveWallSource ? { liveWallSource: settings.liveWallSource } : {}),
       events: settings.event
         ? developmentSettings.events.map((event) => event.slug === settings.event!.slug ? { ...event, uploadEnabled: settings.event!.uploadEnabled } : event)
@@ -209,4 +225,45 @@ export async function updateAdminSettings(settings: Partial<Omit<GallerySettings
     return developmentSettingsSnapshot()
   }
   return request<GallerySettings>('/api/admin/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) })
+}
+
+export async function getGreetings(params: { cursor?: string; limit?: number } = {}): Promise<GreetingPage> {
+  if (USE_MOCK_DATA) return developmentGreetings.list(developmentSettings.greetingsEnabled !== false, params)
+  const query = new URLSearchParams()
+  if (params.cursor) query.set('cursor', params.cursor)
+  if (params.limit) query.set('limit', String(params.limit))
+  return request(`/api/greetings?${query}`, {}, 2)
+}
+
+export async function createGreeting(payload: CreateGreetingRequest): Promise<CreateGreetingReceipt> {
+  if (USE_MOCK_DATA) {
+    try { return developmentGreetings.submit(payload, developmentSettings.greetingsEnabled !== false) }
+    catch (error) {
+      if (error instanceof MockGreetingError) throw new GalleryApiError(error.message, error.code)
+      throw error
+    }
+  }
+  // Turnstile tokens are single-use. The composer obtains a new token for retries.
+  return request('/api/greetings', json(payload))
+}
+
+export async function getAdminGreetings(params: { status?: GreetingStatus; cursor?: string } = {}): Promise<AdminGreetingPage> {
+  if (USE_MOCK_DATA) return developmentGreetings.adminList(params)
+  const query = new URLSearchParams(Object.entries(params).filter((entry): entry is [string, string] => Boolean(entry[1])))
+  return request(`/api/admin/greetings?${query}`)
+}
+
+export async function getAdminGreetingStats(): Promise<AdminGreetingStats> {
+  if (USE_MOCK_DATA) return developmentGreetings.stats()
+  return request('/api/admin/greetings/stats')
+}
+
+export async function updateAdminGreetings(ids: string[], status: 'approved' | 'rejected') {
+  if (USE_MOCK_DATA) return developmentGreetings.update(ids, status)
+  return request<{ updated: number }>('/api/admin/greetings/batch', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids, status }) })
+}
+
+export async function deleteAdminGreeting(id: string) {
+  if (USE_MOCK_DATA) return developmentGreetings.delete(id)
+  return request<{ deleted: boolean }>(`/api/admin/greetings/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }

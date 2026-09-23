@@ -5,6 +5,7 @@ import { adminBatchMediaRoute, adminDeleteMediaRoute, adminLoginRoute, adminLogo
 import { eventsRoute } from './routes/events'
 import { galleryDetailRoute, galleryDownloadRoute, galleryDownloadStatusRoute, galleryRoute } from './routes/gallery'
 import { liveConfigRoute } from './routes/live'
+import { adminBatchGreetingsRoute, adminDeleteGreetingRoute, adminGreetingStatsRoute, adminGreetingsRoute, createGreetingRoute, greetingsRoute } from './routes/greetings'
 import { completeUploadRoute, prepareUploadsRoute, refreshUploadRoute } from './routes/uploads'
 import { cleanupStaleUploads } from './scheduled/cleanup'
 
@@ -19,6 +20,8 @@ export async function fetchHandler(request: Request, env: Env) {
 
     if (request.method === 'GET' && pathname === '/health') return json(request,env,{ status: 'ok', environment: env.ENVIRONMENT })
     if (request.method === 'GET' && pathname === '/api/events') return await eventsRoute(request,env)
+    if (request.method === 'GET' && pathname === '/api/greetings') return await greetingsRoute(request,env)
+    if (request.method === 'POST' && pathname === '/api/greetings') return await createGreetingRoute(request,env)
     if (request.method === 'GET' && pathname === '/api/gallery') return await galleryRoute(request,env)
     if (request.method === 'GET' && pathname === '/api/gallery/download-status') return galleryDownloadStatusRoute(request,env)
     if (request.method === 'GET' && pathname === '/api/live/config') return await liveConfigRoute(request,env)
@@ -37,6 +40,11 @@ export async function fetchHandler(request: Request, env: Env) {
     if (request.method === 'POST' && pathname === '/api/admin/logout') return await adminLogoutRoute(request,env)
     if (request.method === 'GET' && pathname === '/api/admin/session') return await adminSessionRoute(request,env)
     if (request.method === 'GET' && pathname === '/api/admin/stats') return await adminStatsRoute(request,env)
+    if (request.method === 'GET' && pathname === '/api/admin/greetings') return await adminGreetingsRoute(request,env)
+    if (request.method === 'GET' && pathname === '/api/admin/greetings/stats') return await adminGreetingStatsRoute(request,env)
+    if (request.method === 'PATCH' && pathname === '/api/admin/greetings/batch') return await adminBatchGreetingsRoute(request,env)
+    const adminGreeting = pathname.match(/^\/api\/admin\/greetings\/([0-9a-f-]{36})$/i)
+    if (request.method === 'DELETE' && adminGreeting) return await adminDeleteGreetingRoute(request,env,adminGreeting[1])
     if (request.method === 'GET' && pathname === '/api/admin/media') return await adminMediaRoute(request,env)
     if (request.method === 'PATCH' && pathname === '/api/admin/media/batch') return await adminBatchMediaRoute(request,env)
     const adminMedia = pathname.match(/^\/api\/admin\/media\/([0-9a-f-]{36})$/i)

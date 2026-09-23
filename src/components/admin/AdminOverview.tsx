@@ -21,7 +21,7 @@ export function AdminOverview() {
   ] as const
   return (
     <div className="admin-overview">
-      <div className="admin-section-heading"><div><p className="eyebrow">Flight operations</p><h1>Good evening, crew.</h1></div><p>{stats.uploadsToday} new memories today · {stats.dayOne} from Day 1 · {stats.dayTwo} from Day 2</p></div>
+      <div className="admin-section-heading"><div><p className="eyebrow">Gallery overview</p><h1>Every memory, together.</h1></div><p>{stats.uploadsToday} new memories today · {stats.dayOne} from the solemnisation · {stats.dayTwo} from the reception</p></div>
       <div className="stats-grid">{cards.map(([label, value, Icon]) => <article key={label}><Icon aria-hidden="true" /><span>{label}</span><strong>{value.toLocaleString()}</strong></article>)}</div>
       <StorageMeter storage={stats.storage} />
     </div>

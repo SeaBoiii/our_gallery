@@ -25,7 +25,10 @@ export async function adminLoginRoute(request: Request, env: Env) {
 
 export async function adminLogoutRoute(request: Request, env: Env) {
   requireOrigin(request, env)
-  await revokeAdminSession(request, env)
+  try { await revokeAdminSession(request, env) } catch (error) {
+    // An expired/revoked session is already signed out; still clear its cookie.
+    if (!isHttpError(error) || error.status !== 401) throw error
+  }
   return json(request, env, { authenticated: false }, 200, { 'Set-Cookie': clearAdminCookie(env), 'Cache-Control': 'no-store' })
 }
 
@@ -150,7 +153,7 @@ async function readSettings(env: Env): Promise<GallerySettings> {
   ])
   const values = new Map(settings.results.map((row) => [row.key,row.value]))
   const autoApproveValue = values.get('auto_approve_uploads')
-  return { uploadsEnabled: values.get('uploads_enabled') !== 'false', autoApproveUploads: autoApproveValue === 'true' || (autoApproveValue !== 'false' && env.AUTO_APPROVE_UPLOADS === 'true'), liveWallSource: (values.get('live_wall_source') || 'all') as GallerySettings['liveWallSource'], events: events.results.map((row) => ({ id: row.id,slug: row.slug,name: row.name,eventDate: row.event_date,displayName: row.display_name,uploadEnabled:Boolean(row.upload_enabled) })) }
+  return { uploadsEnabled: values.get('uploads_enabled') !== 'false', autoApproveUploads: autoApproveValue === 'true' || (autoApproveValue !== 'false' && env.AUTO_APPROVE_UPLOADS === 'true'), greetingsEnabled: values.get('greetings_enabled') !== 'false', liveWallSource: (values.get('live_wall_source') || 'all') as GallerySettings['liveWallSource'], events: events.results.map((row) => ({ id: row.id,slug: row.slug,name: row.name,eventDate: row.event_date,displayName: row.display_name,uploadEnabled:Boolean(row.upload_enabled) })) }
 }
 
 export async function adminSettingsRoute(request: Request, env: Env) {
@@ -162,11 +165,12 @@ export async function adminSettingsRoute(request: Request, env: Env) {
 export async function adminUpdateSettingsRoute(request: Request, env: Env) {
   requireOrigin(request, env)
   const admin = await requireAdmin(request, env)
-  const payload = await parseJson<{ uploadsEnabled?: boolean; autoApproveUploads?: boolean; liveWallSource?: 'all' | EventSlug; event?: { slug?: EventSlug; uploadEnabled?: boolean } }>(request)
+  const payload = await parseJson<{ uploadsEnabled?: boolean; autoApproveUploads?: boolean; greetingsEnabled?: boolean; liveWallSource?: 'all' | EventSlug; event?: { slug?: EventSlug; uploadEnabled?: boolean } }>(request)
   const statements: D1PreparedStatement[] = []
   const now = new Date().toISOString()
   if (typeof payload.uploadsEnabled === 'boolean') statements.push(env.DB.prepare("INSERT INTO settings(key,value,updated_at) VALUES('uploads_enabled',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at").bind(String(payload.uploadsEnabled),now))
   if (typeof payload.autoApproveUploads === 'boolean') statements.push(env.DB.prepare("INSERT INTO settings(key,value,updated_at) VALUES('auto_approve_uploads',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at").bind(String(payload.autoApproveUploads),now))
+  if (typeof payload.greetingsEnabled === 'boolean') statements.push(env.DB.prepare("INSERT INTO settings(key,value,updated_at) VALUES('greetings_enabled',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at").bind(String(payload.greetingsEnabled),now))
   if (payload.liveWallSource) {
     if (!['all','solemnisation','reception'].includes(payload.liveWallSource)) throw new HttpError(400,'INVALID_LIVE_SOURCE','Unknown live wall source.')
     statements.push(env.DB.prepare("INSERT INTO settings(key,value,updated_at) VALUES('live_wall_source',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at").bind(payload.liveWallSource,now))

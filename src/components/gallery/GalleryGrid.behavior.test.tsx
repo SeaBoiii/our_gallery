@@ -126,7 +126,7 @@ describe('gallery experience', () => {
     api.getGallery.mockResolvedValue({ items: [], nextCursor: null } satisfies GalleryPage)
     renderGallery(onAddMemory)
 
-    const heading = await screen.findByRole('heading', { name: 'The memory log is ready.' })
+    const heading = await screen.findByRole('heading', { name: 'Every story starts with a moment.' })
     expect(heading.closest('.gallery-state')).toHaveAttribute('role', 'status')
     fireEvent.click(screen.getByRole('button', { name: 'Add a memory' }))
     expect(onAddMemory).toHaveBeenCalledOnce()

@@ -153,7 +153,7 @@ export default function LivePage() {
       <div className="live-clouds" aria-hidden="true" />
       <header className="live-header">
         <div className="live-brand">
-          <div className="live-brand-mark"><WeddingMonogram compact label="Aleem and Nurul" /></div>
+          <div className="live-brand-mark"><WeddingMonogram compact label="Aleem and Nurulain" /></div>
           <span>{t.flightMemories} · AN-210827</span>
         </div>
         <div className="live-controls">

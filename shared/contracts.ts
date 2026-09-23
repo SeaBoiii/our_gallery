@@ -160,9 +160,37 @@ export type AdminMedia = {
 
 export type AdminMediaPage = { items: AdminMedia[]; nextCursor: string | null }
 
+export type GreetingStatus = 'pending' | 'approved' | 'rejected' | 'deleted'
+
+export type Greeting = {
+  id: string
+  guestName: string | null
+  message: string
+  createdAt: string
+}
+
+export type GreetingPage = {
+  items: Greeting[]
+  nextCursor: string | null
+  submissionsOpen: boolean
+}
+
+export type CreateGreetingRequest = {
+  requestId: string
+  guestName?: string
+  message: string
+  turnstileToken: string
+}
+
+export type CreateGreetingReceipt = { id: string; status: GreetingStatus }
+export type AdminGreeting = Greeting & { status: GreetingStatus }
+export type AdminGreetingPage = { items: AdminGreeting[]; nextCursor: string | null }
+export type AdminGreetingStats = { pending: number; approved: number; rejected: number; total: number }
+
 export type GallerySettings = {
   uploadsEnabled: boolean
   autoApproveUploads: boolean
+  greetingsEnabled?: boolean
   liveWallSource: 'all' | EventSlug
   events: GalleryEvent[]
 }

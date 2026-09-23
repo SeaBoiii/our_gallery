@@ -1,0 +1,83 @@
+.guestbook { padding-top: 112px; padding-bottom: 112px; scroll-margin-top: 104px; color: var(--ink); }
+.guestbook-heading { display: grid; grid-template-columns: 1.1fr 1fr; gap: 64px; align-items: end; margin-bottom: 48px; }
+.guestbook-heading h2 { max-width: 500px; margin: 16px 0 0; font: 400 clamp(40px, 4.4vw, 62px)/1.04 var(--serif); letter-spacing: -.035em; }
+.guestbook-intro { max-width: 400px; justify-self: end; }
+.guestbook-intro > p { margin: 0; color: var(--ink-soft, #536072); font-size: 14px; line-height: 1.85; }
+.guestbook-write-link { display: inline-flex; align-items: center; justify-content: center; gap: 18px; min-height: 44px; margin-top: 18px; padding: 5px 0; border: 0; border-bottom: 1px solid var(--metal); background: transparent; color: var(--ink); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.guestbook-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; }
+.greeting-card { display: flex; flex-direction: column; min-height: 296px; padding: 31px 30px 28px; border: 1px solid #c4a36738; border-radius: var(--radius-card, 4px); background: var(--paper, #fffdf8); }
+.greeting-card-number { color: var(--metal); font: 400 15px var(--serif); letter-spacing: .03em; }
+.greeting-card blockquote { flex: 1; margin: 27px 0 32px; font: 400 clamp(21px, 1.8vw, 25px)/1.48 var(--serif); letter-spacing: -.01em; white-space: pre-wrap; overflow-wrap: anywhere; }
+.greeting-card footer { display: flex; align-items: center; gap: 12px; font-size: 10px; font-weight: 600; line-height: 1.6; letter-spacing: .1em; text-transform: uppercase; overflow-wrap: anywhere; }
+.greeting-card-line { width: 22px; height: 1px; flex-shrink: 0; background: var(--metal); }
+.guestbook-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; min-height: 220px; padding: 32px 20px; border: 1px solid #c4a36738; text-align: center; }
+.guestbook-state p { margin: 0; color: var(--ink-soft, #536072); font-size: 14px; }
+.guestbook-state h3 { margin: 0; font: 400 32px/1.2 var(--serif); }
+.guestbook-more { margin-top: 32px; text-align: center; }
+.guestbook-more > p { font-size: 13px; }
+.guestbook-closed { padding-top: 18px; font-style: italic; }
+.greeting-overlay { position: fixed; inset: 0; z-index: 120; display: flex; align-items: center; justify-content: center; overflow-y: auto; padding: 28px 16px; background: #081b3199; backdrop-filter: blur(5px); }
+.greeting-dialog { position: relative; width: min(100%, 560px); max-height: calc(100dvh - 56px); overflow-y: auto; overscroll-behavior: contain; padding: 44px 46px 40px; border: 1px solid #c4a36766; border-radius: var(--radius-card, 4px); background: var(--paper, #fffdf8); color: var(--ink); box-shadow: 0 30px 90px #081b3133; }
+.greeting-close { position: absolute; top: 10px; right: 10px; display: grid; place-items: center; width: 44px; height: 44px; border: 0; background: transparent; color: var(--ink); cursor: pointer; }
+.greeting-dialog .eyebrow { margin: 0 34px 15px 0; font-size: 9px; letter-spacing: .17em; }
+.greeting-dialog h2 { margin: 0 0 12px; font: 400 clamp(38px, 5vw, 49px)/1.08 var(--serif); letter-spacing: -.025em; }
+.greeting-dialog-intro { margin: 0 0 27px; max-width: 360px; font-size: 13px; line-height: 1.8; color: var(--ink-soft, #536072); }
+.greeting-fields { display: flex; flex-direction: column; }
+.greeting-fields label { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; font-size: 12px; font-weight: 600; }
+.greeting-fields label > span { color: #6e746f; font-size: 10px; font-weight: 400; }
+.greeting-fields input, .greeting-fields textarea { width: 100%; min-width: 0; border: 1px solid #081b3130; border-radius: 2px; background: transparent; padding: 12px 13px; color: var(--ink); font: inherit; font-size: 14px; line-height: 1.6; }
+.greeting-fields input { margin-bottom: 20px; }
+.greeting-fields textarea { min-height: 140px; resize: vertical; }
+.greeting-fields input:focus, .greeting-fields textarea:focus { outline: 2px solid var(--metal); outline-offset: 2px; }
+.greeting-fields input::placeholder, .greeting-fields textarea::placeholder { color: #68717d; }
+.greeting-count { align-self: end; padding-top: 7px; color: #68717d; font-size: 10px; font-variant-numeric: tabular-nums; }
+.greeting-moderation-note { margin: 17px 0; font-size: 11px; line-height: 1.7; color: #68717d; }
+.greeting-verification { display: grid; gap: 8px; margin-bottom: 20px; }
+.greeting-verification > span { font-size: 10px; color: #68717d; }
+.greeting-verification .turnstile-slot { max-width: 100%; min-height: 0; overflow: hidden; }
+.greeting-submit { width: 100%; }
+.greeting-error { margin: 0 0 18px; padding: 12px 14px; border: 1px solid #b57b7040; background: #b57b7010; color: #803e31; font-size: 12px; line-height: 1.7; }
+.greeting-error p { margin: 0; }
+.greeting-error button { min-height: 36px; margin-top: 6px; padding: 0; border: 0; background: transparent; color: inherit; text-decoration: underline; cursor: pointer; }
+.greeting-success { padding-top: 16px; text-align: center; }
+.greeting-success .eyebrow { margin-right: 0; }
+.greeting-success-mark { display: grid; place-items: center; width: 64px; height: 64px; margin: 0 auto 26px; border: 1px solid var(--metal); border-radius: 50%; color: var(--metal); }
+.greeting-success > p:not(.eyebrow), .greeting-closed-notice p { font-size: 13px; line-height: 1.9; color: var(--ink-soft, #536072); }
+.greeting-success > .button { margin-top: 19px; }
+.greeting-stats { display: flex; flex-wrap: wrap; gap: 14px 32px; margin-bottom: 24px; padding-bottom: 22px; border-bottom: 1px solid #081b3117; }
+.greeting-stats > span { display: flex; align-items: baseline; gap: 9px; font-size: 12px; color: var(--ink-soft, #536072); }
+.greeting-stats strong { font: 400 31px/1.1 var(--serif); color: var(--ink); }
+.admin-greeting-list { display: grid; gap: 16px; }
+.admin-greeting { padding: 24px; border: 1px solid #081b3117; border-radius: var(--radius-card, 4px); background: var(--paper, #fffdf8); }
+.admin-greeting-heading { display: flex; align-items: center; gap: 12px; }
+.admin-greeting-heading label { display: grid; place-items: center; min-width: 32px; min-height: 32px; cursor: pointer; }
+.admin-greeting-heading input { width: 17px; height: 17px; accent-color: var(--ink); }
+.admin-greeting-heading strong { flex: 1; overflow-wrap: anywhere; font-size: 14px; }
+.admin-greeting-heading .status-pill { position: static; }
+.admin-greeting blockquote { margin: 18px 0 22px; font: 400 22px/1.5 var(--serif); white-space: pre-wrap; overflow-wrap: anywhere; }
+.admin-greeting-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; }
+.admin-greeting-footer time { font-size: 11px; color: var(--ink-soft, #536072); }
+.admin-greeting-footer > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.admin-greeting-footer button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-width: 40px; min-height: 40px; padding: 8px 11px; border: 1px solid #081b3122; border-radius: 3px; background: transparent; color: var(--ink); font: inherit; font-size: 11px; cursor: pointer; }
+.admin-greeting-footer .delete-action { color: #973e34; }
+.greeting-dialog button:disabled, .admin-greeting button:disabled, .guestbook button:disabled { cursor: not-allowed; opacity: .5; }
+@media (max-width: 900px) {
+  .guestbook { padding-top: 80px; padding-bottom: 80px; }
+  .guestbook-heading { gap: 32px; }
+  .guestbook-grid { gap: 14px; }
+  .greeting-card { padding: 25px 22px; }
+}
+@media (max-width: 640px) {
+  .guestbook { padding-top: 64px; padding-bottom: 64px; }
+  .guestbook-heading { grid-template-columns: 1fr; gap: 22px; margin-bottom: 30px; }
+  .guestbook-intro { justify-self: start; max-width: 100%; }
+  .guestbook-grid { grid-template-columns: 1fr; gap: 16px; }
+  .greeting-card { min-height: 0; padding: 27px; }
+  .greeting-card blockquote { margin: 22px 0 27px; font-size: 25px; }
+  .greeting-dialog { padding: 45px 24px 28px; max-height: calc(100dvh - 32px); }
+  .greeting-overlay { padding: 16px 12px; }
+  .greeting-dialog .eyebrow { font-size: 8px; }
+  .greeting-fields input, .greeting-fields textarea { font-size: 16px; }
+  .admin-greeting { padding: 18px; }
+  .greeting-stats { gap: 16px 24px; }
+}
