@@ -11,6 +11,14 @@ The gallery-only redesign follows the invitation character of the earlier site: 
 
 These are design references; no third-party photography, layouts or written copy were copied into the application.
 
+## In-browser keepsake studio
+
+- [Angie's online photobooth](https://getangie.com/photobooth): browser camera capture, a short countdown, and a finished photo keepsake. This site uses a single-camera wedding flow; no shared rooms or third-party photobooth service are involved.
+- [TripMemo's Polaroid generator](https://tripmemo.app/polaroid-frame-generator): a live crop/frame/caption preview and local image processing.
+- The wedding palette, original monogram, Instrument Serif and flight details come from this gallery and Our Flight. Ivory, airmail and cloud frames are rendered at 1200 × 1500 pixels. The original generated cloud stationery asset and exact prompt are documented in [POLAROID_ASSETS.md](POLAROID_ASSETS.md).
+
+The same canvas renderer produces the preview and exported PNG. Local photos and camera frames stay on the device until the guest explicitly chooses **Add to gallery**, which opens the existing moderated uploader. No existing gallery original or timed download is fetched by the studio. Actual frame outputs were rendered through the production rendering module using an isolated native canvas adapter and visually inspected; this validates the export artwork, not the browser UI or a physical camera.
+
 ## New illustration
 
 `src/components/PaperPlane.tsx` is an original SVG illustration with shaded paper folds and a soft shadow. It is rendered directly as code, needs no external graphics runtime and has no continuous animation. The entrance animation respects the site's reduced-motion setting. All decoration is hidden from assistive technology.

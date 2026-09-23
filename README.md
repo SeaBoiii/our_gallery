@@ -351,6 +351,16 @@ Approved photos are browsed through separate display derivatives, so their origi
 
 ## Quality checks
 
+### Polaroid keepsake studio
+
+`/polaroid` is the in-browser photo booth, linked from the gallery header and front page. Guests can choose a local JPG, PNG, WebP or HEIC photo (up to 25 MB), or take a camera photo with a cancellable countdown. They can choose an ivory, airmail or cloud frame; adjust crop, zoom and rotation; add a short caption and celebration date; and save a 1200 × 1500 PNG.
+
+Photos remain local during editing and export. **Add to gallery** passes the finished framed PNG into the existing approval flow as a new photo. It does not upload the unframed source automatically or fetch existing gallery originals. Existing upload limits, media records and the original download-release date are unchanged. The camera closes on capture, cancel or navigation. The studio does not persist unfinished edits after leaving the page.
+
+See [design references](docs/DESIGN_REFERENCES.md) and [generated asset provenance](docs/POLAROID_ASSETS.md). A connected browser and physical device are still needed to verify real camera permission/playback behaviour visually.
+
+### Commands
+
 ```bash
 npm run lint
 npm test

@@ -3,6 +3,7 @@ import { ArrowUpRight, ImagePlus, Plane } from 'lucide-react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { FlightHeader } from '../components/FlightHeader'
 import { Hero } from '../components/Hero'
+import { PolaroidTeaser } from '../components/PolaroidTeaser'
 import { WeddingMonogram } from '../components/WeddingMonogram'
 import { GalleryGrid } from '../components/gallery/GalleryGrid'
 import { UploadExperience } from '../components/upload/UploadExperience'
@@ -43,6 +44,7 @@ export function HomePage() {
       <a className="skip-gallery" href="#gallery">{locale === 'en' ? 'Skip to the gallery' : 'Terus ke galeri'}</a>
       <FlightHeader onAddMemory={openUploader} />
       <Hero onAddMemory={openUploader} onTakePhoto={() => cameraRef.current?.click()} onChooseMedia={() => mediaRef.current?.click()} />
+      <PolaroidTeaser />
       <section className="gallery-preview" id="gallery" aria-labelledby="gallery-title" tabIndex={-1}>
         <div className="journal-section-label"><p className="eyebrow">{locale === 'en' ? 'Our collected memories' : 'Koleksi kenangan kita'}</p><span aria-hidden="true">VOL. 01 <Plane size={13} /></span></div>
         <div className="gallery-heading-row"><h2 id="gallery-title">{t.galleryTitle}</h2><p>{t.galleryBody}</p></div>

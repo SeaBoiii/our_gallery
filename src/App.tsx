@@ -10,6 +10,7 @@ import { WeddingMonogram } from './components/WeddingMonogram'
 const LivePage = lazy(() => import('./pages/LivePage'))
 const QrPage = lazy(() => import('./pages/QrPage'))
 const AdminPage = lazy(() => import('./pages/AdminPage'))
+const PolaroidPage = lazy(() => import('./pages/PolaroidPage'))
 
 function RouteLoading() {
   const { locale } = useLocale()
@@ -25,6 +26,7 @@ function RoutedContent() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/gallery" element={<HomePage />} />
+          <Route path="/polaroid" element={<PolaroidPage />} />
           <Route path="/guestbook" element={<Navigate to="/gallery" replace />} />
           <Route path="/live" element={<LivePage />} />
           <Route path="/qr" element={<QrPage />} />
