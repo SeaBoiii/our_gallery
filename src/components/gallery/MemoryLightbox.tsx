@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, Download, LoaderCircle, RefreshCw, Share2, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download, LoaderCircle, Plane, RefreshCw, Share2, X } from 'lucide-react'
 import type { GalleryMedia } from '../../../shared/contracts'
 import { useLocale } from '../../context/useLocale'
 import { useModalFocus } from '../../hooks/useModalFocus'
@@ -21,7 +21,7 @@ type Toast = { key: number; itemId: string; message: string; tone: 'status' | 'e
 
 function blocksLightboxArrows(target: EventTarget | null) {
   if (!(target instanceof Element)) return false
-  return Boolean(target.closest('video, input, textarea, select, [contenteditable="true"], [role="slider"], [role="textbox"]'))
+  return Boolean(target.closest('video, input, textarea, select, [contenteditable="true"], [role="slider"], [role="textbox"], [data-lightbox-scroll]'))
 }
 
 export function MemoryLightbox({ items, index, downloadsAvailable, onClose, onDownloadsLocked, onIndexChange, onRefresh }: Props) {
@@ -31,13 +31,15 @@ export function MemoryLightbox({ items, index, downloadsAvailable, onClose, onDo
   const itemCount = items.length
   const canNavigate = itemCount > 1
   const dialogRef = useRef<HTMLDivElement>(null)
-  const touchStart = useRef<number | null>(null)
+  const touchStart = useRef<{ x: number; y: number } | null>(null)
   const refreshedUrl = useRef<string | null>(null)
+  const refreshSequence = useRef(0)
   const toastSequence = useRef(0)
   const mounted = useRef(true)
   const [mediaState, setMediaState] = useState<{ itemId: string; url: string; status: MediaStatus } | null>(null)
   const [toast, setToast] = useState<Toast | null>(null)
   const [downloadBusyId, setDownloadBusyId] = useState<string | null>(null)
+  const [mediaAttempt, setMediaAttempt] = useState(0)
 
   const previous = useCallback(() => {
     if (itemCount > 1) onIndexChange((index - 1 + itemCount) % itemCount)
@@ -48,6 +50,10 @@ export function MemoryLightbox({ items, index, downloadsAvailable, onClose, onDo
 
   useModalFocus(dialogRef, Boolean(item))
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
+  useEffect(() => {
+    refreshSequence.current += 1
+    touchStart.current = null
+  }, [item?.id, item?.displayUrl])
 
   useEffect(() => {
     if (!toast) return
@@ -91,6 +97,9 @@ export function MemoryLightbox({ items, index, downloadsAvailable, onClose, onDo
   const dialogLabel = `${t.dialog}: ${t[item.mediaType]} ${t.from} ${memoryOwner}. ${position}`
   const currentMediaStatus = mediaState?.itemId === item.id && mediaState.url === item.displayUrl ? mediaState.status : 'loading'
   const downloadBusy = downloadBusyId === item.id
+  const journal = locale === 'ms'
+    ? { label: 'Jurnal perkahwinan', note: 'Detik untuk dikenang.', details: 'Catatan kenangan', keyboard: 'Anak panah untuk melihat · Esc untuk tutup' }
+    : { label: 'Wedding journal', note: 'A moment to keep.', details: 'Memory notes', keyboard: 'Arrow keys to browse · Esc to close' }
 
   const announce = (message: string, tone: Toast['tone'] = 'status') => {
     if (!mounted.current) return
@@ -149,6 +158,7 @@ export function MemoryLightbox({ items, index, downloadsAvailable, onClose, onDo
   }
 
   const setCurrentMediaStatus = (status: MediaStatus) => {
+    if (status === 'ready') refreshSequence.current += 1
     setMediaState({ itemId: item.id, url: item.displayUrl, status })
   }
 
@@ -158,44 +168,54 @@ export function MemoryLightbox({ items, index, downloadsAvailable, onClose, onDo
       setCurrentMediaStatus('error')
       return
     }
+    const sequence = ++refreshSequence.current
     refreshedUrl.current = failedUrl
     setCurrentMediaStatus('loading')
     try {
       await onRefresh(item.id)
+      if (!mounted.current || sequence !== refreshSequence.current) return
+      if (force) {
+        // Protected Worker URLs remain stable. Remount the element to retry its
+        // request without changing that URL or its visibility checks.
+        setMediaAttempt((attempt) => attempt + 1)
+      } else {
+        setCurrentMediaStatus('error')
+      }
     } catch {
-      // The retry panel below is the user-facing recovery path.
-    } finally {
-      // A new URL resets this state in the effect above. If the URL did not change,
-      // leave an actionable retry instead of an endless loading indicator.
-      setCurrentMediaStatus('error')
+      if (mounted.current && sequence === refreshSequence.current) setCurrentMediaStatus('error')
     }
   }
 
   const mediaClassName = `lightbox-media is-${currentMediaStatus}`
-  const hasCaption = Boolean(item.guestName || item.guestMessage)
 
   return (
-    <div ref={dialogRef} className="lightbox" role="dialog" aria-modal="true" aria-label={dialogLabel} tabIndex={-1}>
+    <div ref={dialogRef} className="lightbox lightbox--journal" role="dialog" aria-modal="true" aria-label={dialogLabel} tabIndex={-1}>
       <div className="lightbox-bar">
-        <p className="lightbox-flight"><span>{eventDate}</span>{copy[locale].flightMemories}</p>
+        <p className="lightbox-flight"><span>{journal.label}</span>{copy[locale].brand}</p>
         <div className="lightbox-actions">
           {downloadsAvailable ? (
-            <button type="button" onClick={() => { void download().catch(() => undefined) }} disabled={downloadBusy} aria-label={t.download}>
+            <button type="button" onClick={() => { void download().catch(() => undefined) }} disabled={downloadBusy} aria-label={t.download} aria-busy={downloadBusy} title={t.download}>
               {downloadBusy ? <LoaderCircle className="spin" aria-hidden="true" /> : <Download aria-hidden="true" />}
             </button>
           ) : null}
-          <button type="button" onClick={() => void share()} aria-label={t.share}><Share2 aria-hidden="true" /></button>
-          <button type="button" onClick={onClose} aria-label={t.close} data-modal-autofocus data-modal-focus-recovery><X aria-hidden="true" /></button>
+          <button type="button" onClick={() => void share()} aria-label={t.share} title={t.share}><Share2 aria-hidden="true" /></button>
+          <button type="button" className="lightbox-close" onClick={onClose} aria-label={t.close} title={t.close} data-modal-autofocus data-modal-focus-recovery><X aria-hidden="true" /></button>
         </div>
       </div>
 
-      <figure
-        className={`lightbox-content${item.mediaType === 'video' ? ' lightbox-content--video' : ''}${hasCaption ? ' has-caption' : ''}`}
-        onTouchStart={item.mediaType === 'photo' && canNavigate ? (event) => { touchStart.current = event.touches[0]?.clientX ?? null } : undefined}
+      <figure className={`lightbox-content${item.mediaType === 'video' ? ' lightbox-content--video' : ''}`}>
+        <div className="lightbox-stage"
+        onTouchStart={item.mediaType === 'photo' && canNavigate ? (event) => {
+          const touch = event.touches.length === 1 ? event.touches[0] : null
+          touchStart.current = touch ? { x: touch.clientX, y: touch.clientY } : null
+        } : undefined}
+        onTouchCancel={() => { touchStart.current = null }}
         onTouchEnd={item.mediaType === 'photo' && canNavigate ? (event) => {
           if (touchStart.current === null) return
-          const delta = (event.changedTouches[0]?.clientX ?? touchStart.current) - touchStart.current
-          if (Math.abs(delta) > 55) {
+          const touch = event.changedTouches[0]
+          const delta = (touch?.clientX ?? touchStart.current.x) - touchStart.current.x
+          const vertical = (touch?.clientY ?? touchStart.current.y) - touchStart.current.y
+          if (Math.abs(delta) > 55 && Math.abs(delta) > Math.abs(vertical) * 1.4) {
             if (delta > 0) previous()
             else next()
           }
@@ -204,7 +224,7 @@ export function MemoryLightbox({ items, index, downloadsAvailable, onClose, onDo
       >
         {item.mediaType === 'video' ? (
           <video
-            key={item.displayUrl}
+            key={`${item.id}:${item.displayUrl}:${mediaAttempt}`}
             className={mediaClassName}
             src={item.displayUrl}
             poster={item.thumbnailUrl}
@@ -220,10 +240,11 @@ export function MemoryLightbox({ items, index, downloadsAvailable, onClose, onDo
           />
         ) : (
           <img
-            key={item.displayUrl}
+            key={`${item.id}:${item.displayUrl}:${mediaAttempt}`}
             className={mediaClassName}
             src={item.displayUrl}
             alt={item.guestMessage || `${t.guestMemory} ${t.from} ${eventName}`}
+            decoding="async"
             onLoad={() => setCurrentMediaStatus('ready')}
             onError={() => void refreshMedia()}
           />
@@ -238,13 +259,15 @@ export function MemoryLightbox({ items, index, downloadsAvailable, onClose, onDo
             )}
           </div>
         ) : null}
-
-        {hasCaption ? (
-          <figcaption>
-            {item.guestMessage ? <blockquote>“{item.guestMessage}”</blockquote> : null}
-            {item.guestName ? <p>{t.sharedBy} {item.guestName}</p> : null}
-          </figcaption>
-        ) : null}
+        </div>
+        <figcaption className="lightbox-notes" tabIndex={0} data-lightbox-scroll aria-label={journal.details}>
+          <p className="lightbox-note-label">{copy[locale].flightMemories}</p>
+          <h2>{eventName}</h2>
+          <div className="lightbox-note-rule" aria-hidden="true"><span /><Plane size={18} strokeWidth={1.2} /><span /></div>
+          {item.guestMessage ? <blockquote>“{item.guestMessage}”</blockquote> : <p className="lightbox-note-empty">{journal.note}</p>}
+          {item.guestName ? <p className="lightbox-guest"><span>{t.sharedBy}</span><strong>{item.guestName}</strong></p> : null}
+          <p className="lightbox-note-reference"><span>{t[item.mediaType]}</span><span>{eventDate}</span></p>
+        </figcaption>
       </figure>
 
       <div className={`lightbox-navigation${canNavigate ? '' : ' is-single'}`}>
@@ -252,6 +275,7 @@ export function MemoryLightbox({ items, index, downloadsAvailable, onClose, onDo
         <p className="lightbox-count" aria-live="polite" aria-atomic="true">{position}</p>
         {canNavigate ? <button type="button" className="lightbox-arrow lightbox-arrow--next" onClick={next} aria-label={t.next}><ChevronRight aria-hidden="true" /></button> : null}
       </div>
+      <p className="lightbox-keyboard-hint" aria-hidden="true">{journal.keyboard}</p>
 
       {toast?.itemId === item.id ? (
         <p key={toast.key} className={`lightbox-toast is-${toast.tone}`} role={toast.tone === 'error' ? 'alert' : 'status'} aria-live={toast.tone === 'error' ? 'assertive' : 'polite'} aria-atomic="true">

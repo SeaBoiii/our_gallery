@@ -14,20 +14,29 @@ let imageSources: string[]
 let pendingAssets: (() => void)[]
 let contexts: MockContext[]
 const originalFonts = Object.getOwnPropertyDescriptor(document, 'fonts')
-type TextRun = { text: string; x: number; y: number; maxWidth: number; fontSize: number }
+type TextRun = { text: string; x: number; y: number; maxWidth: number; fontSize: number; font: string; fillStyle: string }
+type PathPoint = { kind: 'move' | 'line'; x: number; y: number }
+type StrokeRun = { points: PathPoint[]; color: string; width: number }
 
 function makeContext() {
   return {
     font: '', fillStyle: '', strokeStyle: '', lineWidth: 1, textAlign: '', textBaseline: '', globalAlpha: 1,
     imageSmoothingEnabled: false, imageSmoothingQuality: '',
     drawImage: vi.fn(), fillRect: vi.fn(), strokeRect: vi.fn(), save: vi.fn(), restore: vi.fn(),
-    beginPath: vi.fn(), rect: vi.fn(), clip: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), stroke: vi.fn(),
+    pathPoints: [] as PathPoint[], strokeRuns: [] as StrokeRun[],
+    beginPath: vi.fn(function (this: { pathPoints: PathPoint[] }) { this.pathPoints = [] }),
+    rect: vi.fn(), clip: vi.fn(),
+    moveTo: vi.fn(function (this: { pathPoints: PathPoint[] }, x: number, y: number) { this.pathPoints.push({ kind: 'move', x, y }) }),
+    lineTo: vi.fn(function (this: { pathPoints: PathPoint[] }, x: number, y: number) { this.pathPoints.push({ kind: 'line', x, y }) }),
+    stroke: vi.fn(function (this: { pathPoints: PathPoint[]; strokeRuns: StrokeRun[]; strokeStyle: string; lineWidth: number }) {
+      this.strokeRuns.push({ points: [...this.pathPoints], color: this.strokeStyle, width: this.lineWidth })
+    }),
     translate: vi.fn(), rotate: vi.fn(), putImageData: vi.fn(),
     getImageData: vi.fn(() => ({ data: new Uint8ClampedArray([100, 150, 200, 255]) })),
     createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
     textRuns: [] as TextRun[],
-    fillText: vi.fn(function (this: { font: string; textRuns: TextRun[] }, text: string, x: number, y: number, maxWidth: number) {
-      this.textRuns.push({ text, x, y, maxWidth, fontSize: Number(this.font.match(/([\d.]+)px/)?.[1] ?? 20) })
+    fillText: vi.fn(function (this: { font: string; fillStyle: string; textRuns: TextRun[] }, text: string, x: number, y: number, maxWidth: number) {
+      this.textRuns.push({ text, x, y, maxWidth, fontSize: Number(this.font.match(/([\d.]+)px/)?.[1] ?? 20), font: this.font, fillStyle: this.fillStyle })
     }),
     measureText(text: string) { return { width: Array.from(text).length * Number(this.font.match(/([\d.]+)px/)?.[1] ?? 20) * 0.55 } },
   }
@@ -286,11 +295,12 @@ describe('shared preview and PNG renderer', () => {
     const captionCalls = output.fillText.mock.calls.filter((call) => call[2] < 1280)
     expect(captionCalls).toHaveLength(2)
     expect(captionCalls.every((call) => call[2] <= 1248 && call[3] === 984)).toBe(true)
-    const names = output.textRuns.find(run => run.text === 'Aleem & Nurulain')!
+    const names = output.textRuns.find(run => run.text === 'Aleem')!
     expect(names.fontSize).toBe(60)
     expect(captionCalls.every(call => call[2] < names.y - names.fontSize)).toBe(true)
     expect(output.font).toContain('monospace')
     expect(document.fonts.load).toHaveBeenCalledWith('400 48px "Instrument Serif"')
+    expect(document.fonts.load).toHaveBeenCalledWith('italic 400 48px "Instrument Serif"')
   })
 
   it('exports the same renderer as a 1200×1500 PNG and releases its temporary canvas', async () => {
@@ -324,7 +334,7 @@ describe('shared preview and PNG renderer', () => {
     expect(canvas.width).toBe(1200)
     expect(imageSources.map((source) => new URL(source).pathname)).toEqual(['/monogram.png', '/polaroid-clouds.png'])
     expect(imageSources.every((source) => new URL(source).origin === window.location.origin)).toBe(true)
-    expect(contexts[0].textRuns.find(run => run.text === 'Aleem & Nurulain')?.fontSize).toBe(96)
+    expect(contexts[0].textRuns.find(run => run.text === 'Aleem')?.fontSize).toBe(96)
   })
 
   it('caches decorative assets between previews and export', async () => {
@@ -333,7 +343,38 @@ describe('shared preview and PNG renderer', () => {
     await renderer.drawPolaroid(canvas, photo(), settings({ frame: 'clouds', zoom: 2 }))
     await renderer.exportPolaroid(photo(), settings({ frame: 'clouds' }))
     expect(imageSources).toHaveLength(2)
-    expect(document.fonts.load).toHaveBeenCalledTimes(1)
+    expect(document.fonts.load).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(document.fonts.load).mock.calls.map(([font]) => font)).toEqual(['400 48px "Instrument Serif"', 'italic 400 48px "Instrument Serif"'])
+  })
+
+  it('waits for the italic font face as well as the regular face before drawing the names', async () => {
+    let finishItalic!: (faces: FontFace[]) => void
+    const italic = new Promise<FontFace[]>(resolve => { finishItalic = resolve })
+    vi.mocked(document.fonts.load).mockImplementation(font => font.startsWith('italic') ? italic : Promise.resolve([{} as FontFace]))
+    const drawing = renderer.drawPolaroid(document.createElement('canvas'), photo(), settings())
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(document.fonts.load).toHaveBeenCalledTimes(2)
+    expect(contexts).toHaveLength(0)
+    finishItalic([{} as FontFace])
+    await drawing
+
+    const ampersand = contexts[0].textRuns.find(run => run.text === '&')!
+    expect(ampersand.font).toMatch(/^italic 400 /)
+    expect(ampersand.font).toContain('"Instrument Serif"')
+  })
+
+  it('falls back consistently for all name runs if the italic face cannot be loaded', async () => {
+    vi.mocked(document.fonts.load).mockImplementation(font => font.startsWith('italic') ? Promise.resolve([]) : Promise.resolve([{} as FontFace]))
+    await renderer.drawPolaroid(document.createElement('canvas'), photo(), settings())
+
+    const names = contexts[0].textRuns.filter(run => ['Aleem', '&', 'Nurulain'].includes(run.text))
+    expect(names).toHaveLength(3)
+    names.forEach(run => {
+      expect(run.font).toContain('Georgia')
+      expect(run.font).not.toContain('"Instrument Serif"')
+    })
   })
 
   it('prevents an older async draw from overwriting newer editor settings', async () => {
@@ -456,32 +497,58 @@ describe('photobooth layouts and independent crops', () => {
     expect(entries.every((entry) => vi.mocked(entry.photo.dispose).mock.calls.length === 0)).toBe(true)
   })
 
-  it.each(layouts)('keeps all caption and wedding text above the inner rule in every %s frame', async (layout) => {
+  it.each(layouts)('keeps captions, the plane divider, names, date and footer clearly separated in every %s frame', async (layout) => {
     const dimensions = renderer.getBoothLayout(layout)
     const photoBottom = Math.max(...dimensions.photoRects.map((rect) => rect.y + rect.height))
     for (const frame of ['ivory', 'airmail', 'clouds'] as const) {
       for (const celebration of ['solemnisation', 'reception'] as const) {
-        const contextIndex = contexts.length
-        await renderer.drawPhotobooth(document.createElement('canvas'), boothPhotos(), boothSettings({
-          layout, frame, celebration, caption: 'One beautiful day, so many memories, our favourite people',
-        }))
-        const output = contexts[contextIndex]
-        const [borderX, borderY, borderWidth, borderHeight] = output.strokeRect.mock.calls[0]
-        const bottomRule = borderY + borderHeight
-        expect(output.textRuns.length).toBeGreaterThanOrEqual(3)
-        output.textRuns.forEach((run) => {
-          // Include conservative ascender/descender extents, not only text baselines.
-          expect(run.y - run.fontSize).toBeGreaterThan(photoBottom)
-          expect(run.y + run.fontSize * 0.3).toBeLessThan(bottomRule - 12)
-          expect(run.x - run.maxWidth / 2).toBeGreaterThan(borderX)
-          expect(run.x + run.maxWidth / 2).toBeLessThan(borderX + borderWidth)
-        })
-        const name = output.textRuns.find((run) => run.text === 'Aleem & Nurulain')!
-        const date = output.textRuns.find((run) => run.text.includes('AUGUST 2027'))!
-        expect(name.y + name.fontSize * 0.2).toBeLessThan(date.y - date.fontSize)
-        const captions = output.textRuns.filter((run) => run !== name && run !== date)
-        expect(captions.length).toBeLessThanOrEqual(2)
-        expect(captions.map((run) => run.text).join(' ')).toBe('One beautiful day, so many memories, our favourite people')
+        for (const caption of ['', '   \n ', 'Forever together', 'One beautiful day, so many memories, our favourite people']) {
+          const contextIndex = contexts.length
+          await renderer.drawPhotobooth(document.createElement('canvas'), boothPhotos(), boothSettings({
+            layout, frame, celebration, caption,
+          }))
+          const output = contexts[contextIndex]
+          const [borderX, borderY, borderWidth, borderHeight] = output.strokeRect.mock.calls[0]
+          const bottomRule = borderY + borderHeight
+          expect(output.textRuns.length).toBeGreaterThanOrEqual(6)
+          output.textRuns.forEach((run) => {
+            // Include conservative ascender/descender extents, not only text baselines.
+            expect(run.y - run.fontSize).toBeGreaterThan(photoBottom)
+            expect(run.y + run.fontSize * 0.3).toBeLessThan(bottomRule - 12)
+            expect(run.x - run.maxWidth / 2).toBeGreaterThan(borderX)
+            expect(run.x + run.maxWidth / 2).toBeLessThan(borderX + borderWidth)
+          })
+          const names = output.textRuns.filter(run => ['Aleem', '&', 'Nurulain'].includes(run.text))
+          expect(names).toHaveLength(3)
+          const date = output.textRuns.find((run) => run.text.includes('AUGUST 2027'))!
+          const detail = output.textRuns.find(run => run.text === 'SINGAPORE  /  FOREVER')!
+          const kicker = output.textRuns.find(run => run.text === 'OUR WEDDING')
+          expect(date.fontSize).toBe(layout === 'strip' ? 28 : 34)
+          expect(date.fillStyle).toBe('#081b31')
+          expect(date.text).toBe(celebration === 'solemnisation' ? '21 AUGUST 2027' : '22 AUGUST 2027')
+          expect(Math.max(...names.map(run => run.y + run.fontSize * 0.25)) + 4).toBeLessThan(date.y - date.fontSize)
+          expect(date.y + date.fontSize * 0.25 + 4).toBeLessThan(detail.y - detail.fontSize)
+          const captions = output.textRuns.filter(run => !names.includes(run) && run !== date && run !== detail && run !== kicker)
+          expect(captions.length).toBeLessThanOrEqual(2)
+          expect(captions.map(run => run.text).join(' ')).toBe(caption.trim())
+          expect(Boolean(kicker)).toBe(!caption.trim())
+
+          const marks = output.strokeRuns.filter(run => run.points.length && run.points.every(point => point.y > photoBottom))
+          expect(marks).toHaveLength(2)
+          const divider = marks.find(run => run.points.every(point => point.y === run.points[0].y))!
+          const plane = marks.find(run => run !== divider)!
+          expect(divider.points.filter(point => point.kind === 'move')).toHaveLength(2)
+          expect(divider.color).toBe('#b79b65')
+          expect(plane.color).toBe(divider.color)
+          expect(plane.points.length).toBeGreaterThanOrEqual(5)
+          const planeTop = Math.min(...plane.points.map(point => point.y))
+          const planeBottom = Math.max(...plane.points.map(point => point.y))
+          expect(planeTop).toBeLessThan(divider.points[0].y)
+          expect(planeBottom).toBeGreaterThan(divider.points[0].y)
+          expect(planeBottom + 4).toBeLessThan(Math.min(...names.map(run => run.y - run.fontSize * 0.8)))
+          const aboveDivider = kicker ? [kicker] : captions
+          expect(Math.max(...aboveDivider.map(run => run.y + run.fontSize * 0.25)) + 4).toBeLessThan(planeTop)
+        }
       }
     }
   })
@@ -503,8 +570,8 @@ describe('photobooth layouts and independent crops', () => {
       const contextIndex = contexts.length
       await renderer.drawPhotobooth(document.createElement('canvas'), boothPhotos(), boothSettings({ layout, caption }))
       const output = contexts[contextIndex]
-      expect(output.textRuns.map(run => run.text)).toEqual(['Aleem & Nurulain', '21 AUGUST 2027'])
-      expect(output.textRuns[0].fontSize).toBe(layout === 'strip' ? 82 : 96)
+      expect(output.textRuns.map(run => run.text)).toEqual(['OUR WEDDING', 'Aleem', 'Nurulain', '&', '21 AUGUST 2027', 'SINGAPORE  /  FOREVER'])
+      expect(output.textRuns.find(run => run.text === 'Aleem')?.fontSize).toBe(layout === 'strip' ? 82 : 96)
       const monogram = output.drawImage.mock.calls.find(call => (call[0] as { src?: string }).src?.endsWith('/monogram.png'))!
       expect(monogram).toBeDefined()
       expect(monogram[1] + monogram[3] / 2).toBeGreaterThan(renderer.getBoothLayout(layout).width / 2)
@@ -512,7 +579,33 @@ describe('photobooth layouts and independent crops', () => {
     }
     const contextIndex = contexts.length
     await renderer.drawPhotobooth(document.createElement('canvas'), boothPhotos(), boothSettings({ layout, caption: 'Forever together' }))
-    expect(contexts[contextIndex].textRuns.find(run => run.text === 'Aleem & Nurulain')?.fontSize).toBe(layout === 'strip' ? 48 : 60)
+    expect(contexts[contextIndex].textRuns.find(run => run.text === 'Aleem')?.fontSize).toBe(layout === 'strip' ? 48 : 60)
+  })
+
+  it.each(layouts)('centres the %s names as a group around a smaller italic gold ampersand', async layout => {
+    for (const caption of ['', 'A day to remember']) {
+      const contextIndex = contexts.length
+      await renderer.drawPhotobooth(document.createElement('canvas'), boothPhotos(), boothSettings({ layout, caption }))
+      const output = contexts[contextIndex]
+      const first = output.textRuns.find(run => run.text === 'Aleem')!
+      const last = output.textRuns.find(run => run.text === 'Nurulain')!
+      const ampersand = output.textRuns.find(run => run.text === '&')!
+
+      expect(first.font).toMatch(/^400 /)
+      expect(last.font).toBe(first.font)
+      expect(first.fillStyle).toBe('#081b31')
+      expect(last.fillStyle).toBe(first.fillStyle)
+      expect(ampersand.font).toMatch(/^italic 400 /)
+      expect(ampersand.fillStyle).toBe('#a3824d')
+      expect(ampersand.fontSize).toBeCloseTo(first.fontSize * 0.72)
+      expect(ampersand.y).toBe(first.y)
+      expect(last.y).toBe(first.y)
+      expect(first.x + first.maxWidth / 2).toBeLessThan(ampersand.x - ampersand.maxWidth / 2)
+      expect(ampersand.x + ampersand.maxWidth / 2).toBeLessThan(last.x - last.maxWidth / 2)
+      const groupLeft = first.x - first.maxWidth / 2
+      const groupRight = last.x + last.maxWidth / 2
+      expect((groupLeft + groupRight) / 2).toBeCloseTo(renderer.getBoothLayout(layout).width / 2)
+    }
   })
 
   it('allows a date-free draft but rejects null and legacy combined dates before exporting', async () => {
@@ -531,7 +624,7 @@ describe('photobooth layouts and independent crops', () => {
     expect(imageSources.map(source => new URL(source).pathname)).toEqual(['/monogram.png', '/photobooth-strip-clouds.png'])
     expect(contexts[0].fillRect).toHaveBeenCalledWith(0, 0, 900, 2700)
     expect(contexts[0].drawImage.mock.calls.some(call => call.length === 9)).toBe(false)
-    expect(contexts[0].textRuns.map(run => run.text)).toEqual(['Aleem & Nurulain', '21 AUGUST 2027'])
+    expect(contexts[0].textRuns.map(run => run.text)).toEqual(['OUR WEDDING', 'Aleem', 'Nurulain', '&', '21 AUGUST 2027', 'SINGAPORE  /  FOREVER'])
   })
 
   it('snapshots slot order and crops while optional assets load', async () => {

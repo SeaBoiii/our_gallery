@@ -25,6 +25,16 @@ The same canvas renderer produces the preview and exported PNG. Local photos and
 
 `src/components/PaperPlane.tsx` is an original SVG illustration with shaded paper folds and a soft shadow. It is rendered directly as code, needs no external graphics runtime and has no continuous animation. The entrance animation respects the site's reduced-motion setting. All decoration is hidden from assistive technology.
 
+## Keepsake, image viewer and live-wall refinement
+
+- [The RSVP invitation](https://rsvp.aleemxnurul.love/) and its local Our Flight source confirm the existing Instrument Serif family, with a smaller italic gold ampersand. The canvas renderer now loads both regular and italic local font faces, centres the names as measured text runs and gives the date a larger navy line.
+- The printed divider sits above the names in every layout, including prints without a caption. An original canvas paper plane, an “Our Wedding” label for uncaptioned prints, and a small “Singapore / Forever” route detail complete the footer around the authentic offset monogram. These remain crisp procedural elements; the existing cloud stationery is reused.
+- [Pixieset Client Gallery](https://pixieset.com/client-gallery/) and [Pic-Time Slideshows](https://www.pic-time.com/features/slideshows) informed the photograph-first viewer and presentation wall: an immersive dark surround, restrained framing and a distinct area for the photograph's story. The wedding implementation uses navy, ivory, fine gold rules and Instrument Serif.
+
+No reference-site photography or illustrations were copied. Preview and PNG continue to use identical geometry. Export verification covers all layouts, frames, both individual dates, empty/whitespace captions and long captions, with additional unbroken-text checks. Browser preview was unavailable for this update; automated interaction tests and native canvas export inspection are recorded separately from visual browser testing.
+
+Validation: 381 tests across 45 files, lint, the frontend production build and Worker dry-run build pass. Fifty-seven native PNG exports matched preview pixels exactly; contact sheets and the complete strip were inspected. Automated checks include stable-URL image retries, focus/navigation, source filtering, paused rotation, reduced-motion video playback and fullscreen failure recovery. This release changes frontend presentation only.
+
 ## Scope and validation
 
 The home page and administration are gallery-only. Old `/guestbook` links redirect to `/gallery`; the public greeting API is retired. Historical data and migrations remain intact. Media uploads, approval, original files, day associations and the original download-release date remain in place.

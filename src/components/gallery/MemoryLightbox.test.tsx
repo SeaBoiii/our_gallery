@@ -64,7 +64,7 @@ function renderLightbox(overrides: Partial<LightboxProps> = {}) {
 
 describe('MemoryLightbox', () => {
   beforeEach(() => { api.getMediaDownload.mockReset() })
-  afterEach(() => { vi.restoreAllMocks() })
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
   it('hides original downloads until the server reports they are available', () => {
     renderLightbox({ downloadsAvailable: false })
@@ -187,7 +187,84 @@ describe('MemoryLightbox', () => {
     fireEvent.click(retry)
     await waitFor(() => expect(onRefresh).toHaveBeenCalledTimes(2))
 
-    fireEvent.load(image)
+    const reloaded = screen.getByRole('img', { name: 'A lovely memory' })
+    expect(reloaded).not.toBe(image)
+    expect(reloaded).toHaveAttribute('src', memory.displayUrl)
+    fireEvent.load(reloaded)
     expect(screen.queryByText('Preparing this memory…')).not.toBeInTheDocument()
+  })
+
+  it('keeps a late refresh from replacing the ready state of the next photograph', async () => {
+    let finish!: () => void
+    const onRefresh = vi.fn(() => new Promise<void>((resolve) => { finish = resolve }))
+    const second = { ...memory, id: videoMemory.id, displayUrl: 'https://media.test/second', guestMessage: 'Another moment' }
+    const view = renderLightbox({ items: [memory, second], onRefresh })
+    fireEvent.error(screen.getByRole('img', { name: 'A lovely memory' }))
+    expect(onRefresh).toHaveBeenCalledOnce()
+    view.rerender(<LocaleProvider><MemoryLightbox {...view.props} index={1} /></LocaleProvider>)
+    fireEvent.load(screen.getByRole('img', { name: 'Another moment' }))
+    await act(async () => finish())
+    expect(screen.queryByText('Preparing this memory…')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try loading again' })).not.toBeInTheDocument()
+  })
+
+  it('keeps caption scrolling separate from photo swipes and keyboard navigation', () => {
+    const onIndexChange = vi.fn()
+    const onClose = vi.fn()
+    renderLightbox({ items: [memory, videoMemory], onIndexChange, onClose })
+    const notes = screen.getByLabelText('Memory notes')
+    fireEvent.keyDown(notes, { key: 'ArrowRight' })
+    fireEvent.touchStart(notes, { touches: [{ clientX: 200, clientY: 100 }] })
+    fireEvent.touchEnd(notes, { changedTouches: [{ clientX: 30, clientY: 105 }] })
+    expect(onIndexChange).not.toHaveBeenCalled()
+    const image = screen.getByRole('img', { name: 'A lovely memory' })
+    fireEvent.touchStart(image, { touches: [{ clientX: 200, clientY: 100 }] })
+    fireEvent.touchEnd(image, { changedTouches: [{ clientX: 130, clientY: 250 }] })
+    expect(onIndexChange).not.toHaveBeenCalled()
+    fireEvent.touchStart(image, { touches: [{ clientX: 200, clientY: 100 }] })
+    fireEvent.touchEnd(image, { changedTouches: [{ clientX: 30, clientY: 110 }] })
+    expect(onIndexChange).toHaveBeenCalledWith(1)
+    fireEvent.keyDown(notes, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  it('focuses close, traps keyboard focus and restores the opener', async () => {
+    const opener = render(<button type="button">Open photograph</button>)
+    const trigger = screen.getByRole('button', { name: 'Open photograph' })
+    trigger.focus()
+    const view = renderLightbox({ items: [memory, videoMemory] })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Close memory' })).toHaveFocus())
+    const first = screen.getByRole('button', { name: 'Download original' })
+    const last = screen.getByRole('button', { name: 'Next memory' })
+    last.focus()
+    fireEvent.keyDown(last, { key: 'Tab' })
+    expect(first).toHaveFocus()
+    fireEvent.keyDown(first, { key: 'Tab', shiftKey: true })
+    expect(last).toHaveFocus()
+    expect(screen.getByLabelText('Memory notes')).toHaveAttribute('tabindex', '0')
+    view.unmount()
+    expect(trigger).toHaveFocus()
+    opener.unmount()
+  })
+
+  it('shares the existing deep link and announces clipboard failures', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', { share: undefined, clipboard: { writeText } })
+    renderLightbox()
+    fireEvent.click(screen.getByRole('button', { name: 'Share memory' }))
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${window.location.origin}${window.location.pathname}?memory=${memory.id}`))
+    expect(await screen.findByText('Link copied')).toBeVisible()
+    writeText.mockRejectedValueOnce(new Error('Clipboard denied'))
+    fireEvent.click(screen.getByRole('button', { name: 'Share memory' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('The link could not be copied.')
+  })
+
+  it('localizes the journal and blank-caption state without inventing a guest message', () => {
+    window.localStorage.setItem('an-gallery-locale', 'ms')
+    renderLightbox({ items: [{ ...memory, guestName: null, guestMessage: null }] })
+    expect(screen.getByText('Jurnal perkahwinan')).toBeVisible()
+    expect(screen.getByLabelText('Catatan kenangan')).toHaveTextContent('Detik untuk dikenang.')
+    expect(screen.getByRole('heading', { name: '21 Ogos 2027' })).toBeVisible()
+    expect(screen.getByLabelText('Catatan kenangan').querySelector('blockquote')).toBeNull()
   })
 })

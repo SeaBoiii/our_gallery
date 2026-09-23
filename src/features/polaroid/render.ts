@@ -274,9 +274,12 @@ function loadSerifFont() {
     const fallback = 'Georgia, "Times New Roman", serif'
     if (!document.fonts?.load) { resolve(fallback); return }
     const timer = window.setTimeout(() => resolve(fallback), 4000)
-    document.fonts.load('400 48px "Instrument Serif"').then((fonts) => {
+    Promise.all([
+      document.fonts.load('400 48px "Instrument Serif"'),
+      document.fonts.load('italic 400 48px "Instrument Serif"'),
+    ]).then((fonts) => {
       window.clearTimeout(timer)
-      resolve(fonts.length ? '"Instrument Serif", Georgia, serif' : fallback)
+      resolve(fonts.every(face => face.length) ? '"Instrument Serif", Georgia, serif' : fallback)
     }, () => { window.clearTimeout(timer); resolve(fallback) })
   })
   return fontPromise
@@ -388,8 +391,7 @@ function drawFooter(context: CanvasRenderingContext2D, settings: BoothSettings, 
   const center = layout.width / 2
   const unit = Math.min(1, layout.width / POLAROID_WIDTH)
   const top = footerStart(layout)
-  const lowerRule = layout.height - 62 * unit
-  const footerHeight = lowerRule - top
+  const footerHeight = layout.height - 64 * unit - top
   const hasCaption = Boolean(settings.caption.trim())
   // A quiet, offset monogram gives the footer the feel of a printed wedding ticket.
   if (monogram) {
@@ -404,7 +406,7 @@ function drawFooter(context: CanvasRenderingContext2D, settings: BoothSettings, 
   context.textBaseline = 'alphabetic'
   context.fillStyle = INK
   const captionWidth = Math.round(layout.width * 0.82)
-  let captionSize = 52 * unit
+  let captionSize = 48 * unit
   let lines: string[] = []
   while (captionSize >= 20 * unit) {
     context.font = `400 ${captionSize}px ${serif}`
@@ -414,24 +416,60 @@ function drawFooter(context: CanvasRenderingContext2D, settings: BoothSettings, 
   }
   if (!lines.length && hasCaption) lines = [settings.caption]
   // maxWidth remains a final guard for unusual font metrics or unsupported glyphs.
-  lines.forEach((line, index) => context.fillText(line, center, top + (lines.length === 1 ? 72 : 55 + index * 53) * unit, captionWidth))
+  lines.forEach((line, index) => context.fillText(line, center, top + (lines.length === 1 ? 72 : 52 + index * 48) * unit, captionWidth))
+  if (!hasCaption) {
+    context.font = `400 ${18 * unit}px ${MONO_FONT}`
+    context.fillStyle = '#6a695f'
+    context.fillText('OUR WEDDING', center, top + footerHeight * 0.13, layout.width * 0.6)
+  }
+  // The divider belongs above the names, even when the guest leaves no caption.
+  // A small folded plane makes the rule part of the invitation's flight language.
+  const divider = top + footerHeight * (hasCaption ? 0.43 : 0.23)
   context.strokeStyle = GOLD
-  context.lineWidth = 1
+  context.lineWidth = 1.5 * unit
   context.beginPath()
-  context.moveTo(layout.width * 0.15, lowerRule)
-  context.lineTo(layout.width * 0.85, lowerRule)
+  context.moveTo(layout.width * 0.18, divider)
+  context.lineTo(center - 30 * unit, divider)
+  context.moveTo(center + 30 * unit, divider)
+  context.lineTo(layout.width * 0.82, divider)
+  context.stroke()
+  context.beginPath()
+  context.moveTo(center - 14 * unit, divider - 7 * unit)
+  context.lineTo(center + 15 * unit, divider - 11 * unit)
+  context.lineTo(center + 5 * unit, divider + 12 * unit)
+  context.lineTo(center - 1 * unit, divider + 3 * unit)
+  context.lineTo(center - 14 * unit, divider - 7 * unit)
+  context.moveTo(center - 1 * unit, divider + 3 * unit)
+  context.lineTo(center + 15 * unit, divider - 11 * unit)
   context.stroke()
   const nameSize = settings.layout === 'strip' ? (hasCaption ? 48 : 82) : (hasCaption ? 60 : 96)
+  const nameY = top + footerHeight * (hasCaption ? 0.66 : 0.60)
+  // Measure the three runs together so the italic gold ampersand never shifts
+  // the couple's names off centre. These are the RSVP invitation's exact fonts.
   context.font = `400 ${nameSize}px ${serif}`
-  context.fillText('Aleem & Nurulain', center, top + footerHeight * (hasCaption ? 0.65 : 0.57), layout.width * 0.84)
+  const firstWidth = context.measureText('Aleem').width
+  const lastWidth = context.measureText('Nurulain').width
+  context.font = `italic 400 ${nameSize * 0.72}px ${serif}`
+  const ampWidth = context.measureText('&').width
+  const gap = nameSize * 0.19
+  const start = center - (firstWidth + ampWidth + lastWidth + gap * 2) / 2
+  context.font = `400 ${nameSize}px ${serif}`
+  context.fillStyle = INK
+  context.fillText('Aleem', start + firstWidth / 2, nameY, firstWidth)
+  context.fillText('Nurulain', start + firstWidth + gap * 2 + ampWidth + lastWidth / 2, nameY, lastWidth)
+  context.font = `italic 400 ${nameSize * 0.72}px ${serif}`
+  context.fillStyle = '#a3824d'
+  context.fillText('&', start + firstWidth + gap + ampWidth / 2, nameY, ampWidth)
   const labels = {
     solemnisation: '21 AUGUST 2027',
     reception: '22 AUGUST 2027',
   }
-  context.font = `400 ${settings.layout === 'strip' ? 18 : 22}px ${MONO_FONT}`
-  context.fillStyle = '#5b6672'
-  // The date's baseline and descenders stay above the inner rule in every layout.
-  if (settings.celebration) context.fillText(labels[settings.celebration], center, lowerRule - 25 * unit, layout.width * 0.8)
+  context.font = `400 ${settings.layout === 'strip' ? 28 : 34}px ${MONO_FONT}`
+  context.fillStyle = INK
+  if (settings.celebration) context.fillText(labels[settings.celebration], center, top + footerHeight * 0.84, layout.width * 0.8)
+  context.font = `400 ${17 * unit}px ${MONO_FONT}`
+  context.fillStyle = '#6a695f'
+  context.fillText('SINGAPORE  /  FOREVER', center, top + footerHeight * 0.98, layout.width * 0.6)
 }
 
 const renderVersions = new WeakMap<HTMLCanvasElement, number>()
