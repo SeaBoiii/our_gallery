@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LocaleProvider } from '../../context/LocaleContext'
 import { CameraCapture } from './CameraCapture'
+import { DEFAULT_PHOTO_CROP, getBoothLayout, getPhotoGeometry } from './render'
 
 function makeStream(facingMode = 'user') {
   const tracks = [
@@ -23,11 +24,11 @@ function deferred<T>() {
 const getUserMedia = vi.fn<MediaDevices['getUserMedia']>()
 const context = { translate: vi.fn(), scale: vi.fn(), drawImage: vi.fn() }
 
-async function renderCamera(options: { shotCount?: 1 | 4; useOnComplete?: boolean } = {}) {
+async function renderCamera(options: { shotCount?: 1 | 4; aspectRatio?: number; useOnComplete?: boolean } = {}) {
   const onCapture = vi.fn()
   const onComplete = vi.fn()
   const onClose = vi.fn()
-  const result = render(<LocaleProvider><CameraCapture shotCount={options.shotCount} onComplete={options.shotCount === 4 || options.useOnComplete ? onComplete : undefined} onCapture={onCapture} onClose={onClose} /></LocaleProvider>)
+  const result = render(<LocaleProvider><CameraCapture shotCount={options.shotCount} aspectRatio={options.aspectRatio} onComplete={options.shotCount === 4 || options.useOnComplete ? onComplete : undefined} onCapture={onCapture} onClose={onClose} /></LocaleProvider>)
   await act(async () => { await Promise.resolve() })
   return { ...result, onCapture, onComplete, onClose }
 }
@@ -68,7 +69,7 @@ describe('CameraCapture', () => {
 
     expect(getUserMedia).toHaveBeenCalledWith({
       audio: false,
-      video: { facingMode: { ideal: 'user' }, width: { ideal: 1920 }, height: { ideal: 1440 } },
+      video: { facingMode: { ideal: 'user' }, width: { ideal: 1920 }, height: { ideal: 1440 }, aspectRatio: { ideal: 4 / 3 } },
     })
     expect(screen.getByRole('dialog')).toHaveAccessibleName('A little moment, just for you')
     expect(document.body.style.overflow).toBe('hidden')
@@ -156,7 +157,7 @@ describe('CameraCapture', () => {
 
     expect(context.translate).toHaveBeenCalledWith(2400, 0)
     expect(context.scale).toHaveBeenCalledWith(-1, 1)
-    expect(context.drawImage).toHaveBeenCalledWith(video, 0, 0, 2400, 1350)
+    expect(context.drawImage).toHaveBeenCalledWith(video, expect.closeTo(480), 0, expect.closeTo(2880), 2160, 0, 0, 2400, 1800)
     expect(HTMLCanvasElement.prototype.toBlob).toHaveBeenCalledWith(expect.any(Function), 'image/jpeg', 0.92)
     expect(view.onCapture).toHaveBeenCalledTimes(1)
     const file = view.onCapture.mock.calls[0][0] as File
@@ -165,6 +166,44 @@ describe('CameraCapture', () => {
     expect(file.type).toBe('image/jpeg')
     tracks.forEach((track) => expect(track.stop).toHaveBeenCalledTimes(1))
     expect(video.srcObject).toBeNull()
+  })
+
+  it.each([
+    { sensor: 'wide', width: 1920, height: 1080, layout: 'strip' as const, source: [240, 0, 1440, 1080], output: [1440, 1080] },
+    { sensor: 'portrait', width: 1080, height: 1920, layout: 'strip' as const, source: [0, 555, 1080, 810], output: [1080, 810] },
+    { sensor: '4:3', width: 1600, height: 1200, layout: 'strip' as const, source: [0, 0, 1600, 1200], output: [1600, 1200] },
+    { sensor: 'wide', width: 1920, height: 1080, layout: 'grid' as const, source: [420, 0, 1080, 1080], output: [1080, 1080] },
+    { sensor: 'portrait', width: 1080, height: 1920, layout: 'single' as const, source: [0, 420, 1080, 1080], output: [1080, 1080] },
+  ])('keeps the pose centered from a $sensor sensor through the viewfinder and $layout print', async ({ width, height, layout, source, output }) => {
+    vi.useFakeTimers()
+    vi.spyOn(HTMLVideoElement.prototype, 'videoWidth', 'get').mockReturnValue(width)
+    vi.spyOn(HTMLVideoElement.prototype, 'videoHeight', 'get').mockReturnValue(height)
+    getUserMedia.mockResolvedValue(makeStream().stream)
+    const rect = getBoothLayout(layout).photoRects[0]
+    const aspectRatio = rect.width / rect.height
+    const view = await renderCamera({ aspectRatio })
+    const video = view.container.querySelector('video')!
+    const viewfinder = video.parentElement!
+    expect(Number.parseFloat(viewfinder.style.aspectRatio)).toBeCloseTo(aspectRatio)
+    expect(Number.parseFloat(viewfinder.style.maxWidth) / aspectRatio).toBeCloseTo(52)
+    expect(getUserMedia).toHaveBeenCalledWith(expect.objectContaining({ video: expect.objectContaining({ aspectRatio: { ideal: aspectRatio } }) }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Take photo' }))
+    await act(async () => { vi.advanceTimersByTime(3000) })
+
+    expect(context.drawImage).toHaveBeenCalledWith(video, ...source.map(value => expect.closeTo(value)), 0, 0, ...output)
+    const [left, top, cropWidth, cropHeight] = context.drawImage.mock.lastCall!.slice(1, 5) as number[]
+    // The live CSS cover crop and saved crop discard equal amounts on opposite
+    // sides, including portrait sensors that ignore the requested aspect ratio.
+    expect(left + cropWidth / 2).toBeCloseTo(width / 2)
+    expect(top + cropHeight / 2).toBeCloseTo(height / 2)
+    expect(cropWidth / cropHeight).toBeCloseTo(aspectRatio)
+    const printed = getPhotoGeometry(output[0], output[1], DEFAULT_PHOTO_CROP, rect).sourceCrop
+    expect(printed.x).toBeCloseTo(0)
+    expect(printed.y).toBeCloseTo(0)
+    expect(printed.width).toBeCloseTo(output[0])
+    expect(printed.height).toBeCloseTo(output[1])
+    expect(view.onCapture).toHaveBeenCalledOnce()
   })
 
   it('leaves a rear-camera fallback unmirrored in both preview and capture', async () => {
@@ -269,6 +308,7 @@ describe('CameraCapture', () => {
       expect(context.drawImage).toHaveBeenCalledTimes(shot - 1)
       await act(async () => { vi.advanceTimersByTime(1000) })
       expect(context.drawImage).toHaveBeenCalledTimes(shot)
+      expect(context.drawImage).toHaveBeenNthCalledWith(shot, video, expect.closeTo(240), 0, expect.closeTo(1440), 1080, 0, 0, 1440, 1080)
       expect(view.onComplete).not.toHaveBeenCalled()
       expect(view.onCapture).not.toHaveBeenCalled()
 

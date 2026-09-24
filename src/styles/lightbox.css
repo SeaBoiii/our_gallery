@@ -9,8 +9,9 @@
 .lightbox--journal .lightbox-actions button:disabled { cursor: wait; opacity: .55; }
 .lightbox--journal .lightbox-actions svg,.lightbox--journal .lightbox-arrow svg { width: 19px; height: 19px; stroke-width: 1.5; }
 .lightbox--journal button:focus-visible,.lightbox--journal video:focus-visible { outline: 2px solid #f7f2e8; outline-offset: 5px; }
-.lightbox--journal .lightbox-content { display: grid; grid-template-columns: minmax(0,1fr) minmax(235px,300px); grid-template-rows: minmax(0,1fr); gap: clamp(24px,4vw,64px); width: min(100%,1600px); min-width: 0; min-height: 0; justify-self: center; margin: 0; padding: clamp(22px,3.4vw,48px) max(32px,env(safe-area-inset-right)) clamp(22px,3.4vw,48px) max(32px,env(safe-area-inset-left)); }
-.lightbox--journal .lightbox-stage { position: relative; display: grid; grid-template: minmax(0,1fr) / minmax(0,1fr); place-items: center; min-width: 0; min-height: 0; }
+.lightbox--journal .lightbox-content { display: grid; grid-template-columns: minmax(0,1fr) minmax(235px,300px); grid-template-rows: minmax(min-content,1fr); align-items: center; gap: clamp(24px,4vw,64px); width: min(100%,1600px); min-width: 0; min-height: 0; justify-self: center; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: #c4a36770 #081b31; scrollbar-width: thin; margin: 0; padding: clamp(22px,3.4vw,48px) max(32px,env(safe-area-inset-right)) clamp(22px,3.4vw,48px) max(32px,env(safe-area-inset-left)); }
+.lightbox--journal .lightbox-content:focus-visible { outline: 2px solid #c4a367; outline-offset: -5px; }
+.lightbox--journal .lightbox-stage { position: relative; display: grid; grid-template: minmax(0,1fr) / minmax(0,1fr); place-items: center; align-self: start; min-width: 0; min-height: 0; height: max(160px,calc(100svh - 270px)); }
 .lightbox--journal .lightbox-media { grid-area: 1/1; display: block; width: auto; height: auto; max-width: 100%; max-height: 100%; min-width: 0; min-height: 0; border: clamp(6px,.8vw,12px) solid #f7f2e8; border-radius: 0; object-fit: contain; box-shadow: 0 18px 60px #0005; transition: opacity 180ms; }
 .lightbox--journal .lightbox-content--video .lightbox-media { width: 100%; height: 100%; border-width: 1px; border-color: #c4a36760; background: #050f1b; }
 .lightbox--journal .lightbox-media.is-loading { opacity: .3; }
@@ -22,18 +23,12 @@
 .lightbox--journal .lightbox-media-status p { margin: 0; }
 .lightbox--journal .lightbox-media-status button { display: inline-flex; min-height: 44px; align-items: center; gap: 9px; padding: 9px 15px; border: 1px solid #c4a367; border-radius: 2px; color: #081b31; background: #dcc59a; font-size: .7rem; }
 .lightbox--journal .lightbox-media-status button svg { width: 16px; height: 16px; }
-.lightbox--journal .lightbox-content .lightbox-notes { display: flex; min-width: 0; min-height: 0; flex-direction: column; align-self: center; max-height: 100%; overflow-y: auto; padding: clamp(24px,2.5vw,36px); border: 1px solid #c4a36775; border-radius: 0; color: #081b31; background: #f7f2e8; scrollbar-color: #b69a68 #eee6d7; scrollbar-width: thin; overscroll-behavior: contain; }
-.lightbox--journal .lightbox-notes:focus-visible { outline: 2px solid #c4a367; outline-offset: 5px; }
-.lightbox--journal .lightbox-note-label { margin: 0 0 12px; color: #6e624c; font: .54rem/1.6 var(--mono); letter-spacing: .12em; text-transform: uppercase; }
-.lightbox--journal .lightbox-notes h2 { margin: 0; font: 400 clamp(1.8rem,2.7vw,2.6rem)/1.04 var(--serif); letter-spacing: -.025em; }
-.lightbox--journal .lightbox-note-rule { display: flex; flex: 0 0 auto; align-items: center; gap: 12px; margin: 25px 0; color: #92733f; }
-.lightbox--journal .lightbox-note-rule > span { flex: 1; height: 1px; background: #c4a36770; }
-.lightbox--journal .lightbox-notes blockquote,.lightbox--journal .lightbox-note-empty { margin: 0; font: 400 clamp(1.35rem,2vw,1.8rem)/1.38 var(--serif); white-space: pre-wrap; overflow-wrap: anywhere; }
-.lightbox--journal .lightbox-note-empty { font-style: italic; color: #5b6672; }
-.lightbox--journal .lightbox-guest { display: grid; gap: 8px; margin: 24px 0 0; }
-.lightbox--journal .lightbox-guest > span { color: #6e624c; font: .5rem/1.5 var(--mono); letter-spacing: .09em; text-transform: uppercase; }
-.lightbox--journal .lightbox-guest > strong { font-size: .78rem; font-weight: 400; line-height: 1.65; overflow-wrap: anywhere; }
-.lightbox--journal .lightbox-note-reference { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 7px 12px; margin: 28px 0 0; padding-top: 14px; border-top: 1px solid #c4a36770; color: #6e624c; font: .49rem/1.6 var(--mono); letter-spacing: .055em; text-transform: uppercase; }
+.lightbox--journal .lightbox-content .lightbox-notes { display: grid; gap: 16px; min-width: 0; align-self: center; padding: clamp(22px,2.3vw,32px); border: 1px solid #c4a36775; border-radius: 0; color: #081b31; background: #f7f2e8; }
+.lightbox--journal .lightbox-notes blockquote { margin: 0; font: 400 clamp(1.35rem,2vw,1.75rem)/1.4 var(--serif); white-space: pre-wrap; overflow-wrap: anywhere; }
+.lightbox--journal .lightbox-guest { margin: 0; font-size: .78rem; line-height: 1.7; overflow-wrap: anywhere; }
+.lightbox--journal .lightbox-guest > span { color: #5b6672; }
+.lightbox--journal .lightbox-guest > strong { font-weight: 400; }
+.lightbox--journal .lightbox-note-reference { display: block; color: #6e624c; font: .58rem/1.6 var(--mono); letter-spacing: .04em; }
 .lightbox--journal .lightbox-navigation { display: grid; grid-template-columns: 46px minmax(100px,180px) 46px; justify-content: center; align-items: center; gap: 18px; min-height: 80px; padding: 12px 24px max(16px,env(safe-area-inset-bottom)); border-top: 1px solid #c4a36733; }
 .lightbox--journal .lightbox-navigation.is-single { grid-template-columns: 1fr; }
 .lightbox--journal .lightbox-count { margin: 0; color: #d9c8aa; font: .58rem/1.7 var(--mono); letter-spacing: .045em; text-align: center; }
@@ -53,15 +48,11 @@
   .lightbox--journal .lightbox-actions { gap: 6px; }
   .lightbox--journal .lightbox-actions button { width: 44px; height: 44px; }
   .lightbox--journal .lightbox-actions .lightbox-close { margin-left: 0; }
-  .lightbox--journal .lightbox-content { grid-template-columns: minmax(0,1fr); grid-template-rows: minmax(100px,1fr) auto; gap: 18px; padding: 20px max(18px,env(safe-area-inset-right)) 18px max(18px,env(safe-area-inset-left)); overflow-y: auto; }
-  .lightbox--journal .lightbox-content .lightbox-notes { align-self: stretch; width: 100%; max-height: min(27svh,210px); padding: 18px 20px; }
-  .lightbox--journal .lightbox-note-label { margin-bottom: 7px; font-size: .48rem; }
-  .lightbox--journal .lightbox-notes h2 { font-size: 1.75rem; }
-  .lightbox--journal .lightbox-note-rule { gap: 10px; margin: 13px 0; }
-  .lightbox--journal .lightbox-note-rule svg { width: 15px; height: 15px; }
-  .lightbox--journal .lightbox-notes blockquote,.lightbox--journal .lightbox-note-empty { font-size: 1.3rem; line-height: 1.32; }
-  .lightbox--journal .lightbox-guest { gap: 5px; margin-top: 15px; }
-  .lightbox--journal .lightbox-note-reference { margin-top: 15px; padding-top: 10px; }
+  .lightbox--journal .lightbox-content { display: block; padding: 20px max(18px,env(safe-area-inset-right)) 18px max(18px,env(safe-area-inset-left)); }
+  .lightbox--journal .lightbox-stage { height: auto; min-height: 160px; grid-template-rows: auto; }
+  .lightbox--journal .lightbox-content .lightbox-media { width: auto; height: auto; max-height: max(180px,calc(100svh - 245px)); }
+  .lightbox--journal .lightbox-content .lightbox-notes { width: 100%; margin-top: 18px; padding: 18px 20px; gap: 12px; }
+  .lightbox--journal .lightbox-notes blockquote { font-size: 1.3rem; line-height: 1.4; }
   .lightbox--journal .lightbox-navigation { min-height: 70px; padding: 9px 18px max(10px,env(safe-area-inset-bottom)); }
   .lightbox--journal .lightbox-arrow { width: 44px; height: 44px; }
   .lightbox--journal .lightbox-media-status { min-height: 110px; padding: 18px; font-size: .7rem; }
@@ -76,8 +67,10 @@
   .lightbox--journal .lightbox-bar { min-height: 58px; padding-block: max(7px,env(safe-area-inset-top)) 7px; }
   .lightbox--journal .lightbox-flight { font-size: 1.2rem; gap: 4px; }
   .lightbox--journal .lightbox-flight > span { font-size: .45rem; }
-  .lightbox--journal .lightbox-content { grid-template-columns: minmax(0,1fr) minmax(200px,28%); grid-template-rows: minmax(0,1fr); padding-block: 15px; gap: 22px; }
-  .lightbox--journal .lightbox-content .lightbox-notes { max-height: 100%; padding: 16px 20px; }
+  .lightbox--journal .lightbox-content { display: grid; grid-template-columns: minmax(0,1fr) minmax(200px,28%); grid-template-rows: minmax(min-content,1fr); padding-block: 15px; gap: 22px; }
+  .lightbox--journal .lightbox-stage { height: max(160px,calc(100svh - 160px)); min-height: 0; grid-template-rows: minmax(0,1fr); }
+  .lightbox--journal .lightbox-content .lightbox-media { max-height: 100%; }
+  .lightbox--journal .lightbox-content .lightbox-notes { margin-top: 0; padding: 16px 20px; }
   .lightbox--journal .lightbox-navigation { min-height: 62px; padding-block: 7px max(7px,env(safe-area-inset-bottom)); }
   .lightbox--journal .lightbox-keyboard-hint { display: none; }
 }

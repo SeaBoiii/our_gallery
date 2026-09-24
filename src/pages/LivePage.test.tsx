@@ -1,10 +1,13 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { MemoryRouter, useNavigate } from 'react-router-dom'
+import { QRCodeSVG } from 'qrcode.react'
 import type { GalleryMedia, GalleryPage } from '../../shared/contracts'
 import { LocaleProvider } from '../context/LocaleContext'
 import { mockGallery } from '../data/mock'
 import { publicConfig, TestVisibilityProvider } from '../test/visibility'
 import LivePage from './LivePage'
+import { PUBLIC_GALLERY_URL } from '../config'
 
 const api = vi.hoisted(() => ({ getGallery: vi.fn(), getLiveConfig: vi.fn() }))
 vi.mock('../services/api', () => api)
@@ -17,6 +20,8 @@ afterEach(() => {
   Reflect.deleteProperty(document, 'fullscreenElement')
   Reflect.deleteProperty(document, 'exitFullscreen')
   Reflect.deleteProperty(document.documentElement, 'requestFullscreen')
+  window.history.replaceState(null, '', '/')
+  document.getElementById('live-fit-test-style')?.remove()
 })
 
 describe('live wall visibility', () => {
@@ -292,5 +297,148 @@ describe('live travel journal layouts', () => {
     expect(document.querySelector('.live-media img')).toHaveAttribute('src', first.displayUrl)
     expect(scraps()).toHaveLength(0)
     expect(screen.getByRole('main')).toHaveClass('live-layout-0')
+  })
+})
+
+describe('live QR placement', () => {
+  beforeEach(() => {
+    api.getGallery.mockReset().mockResolvedValue({ items: [mockGallery[0]], nextCursor: null })
+    api.getLiveConfig.mockReset().mockResolvedValue({ source: 'all' })
+  })
+
+  it.each([
+    ['', 'right'], ['?qr=right', 'right'], ['?qr=', 'right'], ['?qr=invalid', 'right'], ['?qr=LEFT', 'right'], ['?qr=left', 'left'],
+  ])('uses the requested rail and matching reading order for %s', async (query, side) => {
+    window.history.replaceState(null, '', `/live${query}`)
+    render(tree('solemnisation'))
+    await screen.findByRole('img', { name: mockGallery[0].guestMessage! })
+    const stage = document.querySelector('.live-stage')!
+    const qr = screen.getByRole('complementary')
+    expect(stage).toHaveAttribute('data-qr-side', side)
+    expect(side === 'left' ? stage.firstElementChild : stage.lastElementChild).toBe(qr)
+  })
+
+  it('keeps the gallery destination encoded in a left QR instead of encoding the live-wall options', async () => {
+    const expected = render(<QRCodeSVG value={PUBLIC_GALLERY_URL} size={192} level="H" marginSize={4} />)
+    const expectedCode = expected.container.querySelector('path:last-of-type')!.getAttribute('d')
+    expected.unmount()
+    window.history.replaceState(null, '', '/live?qr=left')
+    render(tree('solemnisation'))
+    await screen.findByRole('img', { name: mockGallery[0].guestMessage! })
+    expect(document.querySelector('.live-qr-code path:last-of-type')).toHaveAttribute('d', expectedCode)
+    expect(screen.getByRole('link', { name: 'gallery.aleemxnurul.love' })).toHaveAttribute('href', PUBLIC_GALLERY_URL)
+  })
+
+  it('updates on router query navigation without resetting the paused slideshow', async () => {
+    function ChangeRail() {
+      const navigate = useNavigate()
+      return <button type="button" onClick={() => navigate('/live?qr=right')}>Move QR right</button>
+    }
+    render(<MemoryRouter initialEntries={['/live?qr=left']}>{tree('solemnisation')}<ChangeRail /></MemoryRouter>)
+    const photo = await screen.findByRole('img', { name: mockGallery[0].guestMessage! })
+    fireEvent.click(screen.getByRole('button', { name: 'Pause slideshow' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Move QR right' }))
+    expect(document.querySelector('.live-stage')).toHaveAttribute('data-qr-side', 'right')
+    expect(screen.getByRole('img', { name: mockGallery[0].guestMessage! })).toBe(photo)
+    expect(screen.getByRole('button', { name: 'Resume slideshow' })).toBeInTheDocument()
+  })
+
+  it('responds to standalone browser back/forward query changes without a router', async () => {
+    render(tree('solemnisation'))
+    await screen.findByRole('img', { name: mockGallery[0].guestMessage! })
+    window.history.replaceState(null, '', '/live?qr=left')
+    fireEvent.popState(window)
+    expect(document.querySelector('.live-stage')).toHaveAttribute('data-qr-side', 'left')
+  })
+})
+
+describe('live print measurement', () => {
+  let slotWidth: number
+  let captionHeight: number
+  let observers: Array<{ notify: () => void; disconnect: ReturnType<typeof vi.fn> }>
+
+  beforeEach(() => {
+    slotWidth = 500
+    captionHeight = 24
+    observers = []
+    const getRect = Element.prototype.getBoundingClientRect
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      if (!this.matches('.live-photo-slot,.live-scrap-slot')) return getRect.call(this)
+      const width = this.matches('.live-photo-slot') ? slotWidth : 210
+      const height = this.matches('.live-photo-slot') ? 380 : 160
+      return { x: 0, y: 0, top: 0, left: 0, right: width, bottom: height, width, height, toJSON: () => ({ width, height }) }
+    })
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) { return this.tagName === 'FIGCAPTION' ? captionHeight : 0 })
+    vi.stubGlobal('ResizeObserver', class {
+      disconnect = vi.fn()
+      observe = vi.fn()
+      constructor(callback: ResizeObserverCallback) { observers.push({ notify: () => callback([], this as unknown as ResizeObserver), disconnect: this.disconnect }) }
+    })
+    const style = document.createElement('style')
+    style.id = 'live-fit-test-style'
+    style.textContent = '.live-media,.live-scrap { padding:10px; border:1px solid; rotate:0deg; }'
+    document.head.append(style)
+    api.getGallery.mockReset().mockResolvedValue({ items: [mockGallery[0]], nextCursor: null })
+    api.getLiveConfig.mockReset().mockResolvedValue({ source: 'all' })
+  })
+
+  const frameRatio = (frame: HTMLElement) => (Number.parseFloat(frame.style.width) - 22) / (Number.parseFloat(frame.style.height) - 22 - captionHeight)
+
+  it('fits metadata first, then hugs the actual decoded aspect instead of retaining a portrait mat', async () => {
+    render(tree('solemnisation'))
+    const photo = await screen.findByRole('img', { name: mockGallery[0].guestMessage! })
+    const frame = photo.closest('figure')!
+    expect(frameRatio(frame)).toBeCloseTo(mockGallery[0].width! / mockGallery[0].height!)
+    expect(Number.parseFloat(frame.style.height)).toBeCloseTo(380)
+    Object.defineProperties(photo, { naturalWidth: { configurable: true, value: 1800 }, naturalHeight: { configurable: true, value: 900 } })
+    fireEvent.load(photo)
+    expect(frameRatio(frame)).toBeCloseTo(2)
+    expect(Number.parseFloat(frame.style.width)).toBeCloseTo(500)
+    expect(Number.parseFloat(frame.style.height)).toBeLessThan(300)
+  })
+
+  it('measures an image with missing metadata after load and disconnects observers on revocation', async () => {
+    api.getGallery.mockResolvedValue({ items: [{ ...mockGallery[0], width: null, height: null }], nextCursor: null })
+    const view = render(tree('solemnisation'))
+    const photo = await screen.findByRole('img', { name: mockGallery[0].guestMessage! })
+    expect(photo.closest('figure')).toHaveAttribute('data-fitted', 'false')
+    Object.defineProperties(photo, { naturalWidth: { configurable: true, value: 1200 }, naturalHeight: { configurable: true, value: 1200 } })
+    fireEvent.load(photo)
+    expect(frameRatio(photo.closest('figure')!)).toBeCloseTo(1)
+    view.rerender(tree(null))
+    expect(observers.length).toBeGreaterThan(0)
+    expect(observers.every(observer => observer.disconnect.mock.calls.length > 0)).toBe(true)
+  })
+
+  it('fits companions to their actual thumbnail ratio as well as the main print', async () => {
+    api.getGallery.mockResolvedValue({ items: [mockGallery[0], mockGallery[1]], nextCursor: null })
+    vi.spyOn(Math, 'random').mockReturnValue(0)
+    render(tree('solemnisation'))
+    await screen.findByRole('img', { name: mockGallery[0].guestMessage! })
+    const photo = document.querySelector<HTMLImageElement>('.live-scrap img')!
+    Object.defineProperties(photo, { naturalWidth: { configurable: true, value: 300 }, naturalHeight: { configurable: true, value: 900 } })
+    fireEvent.load(photo)
+    const frame = photo.closest('figure')!
+    expect(frameRatio(frame)).toBeCloseTo(1 / 3)
+    expect(Number.parseFloat(frame.style.height)).toBeLessThanOrEqual(160)
+    expect(Number.parseFloat(frame.style.width)).toBeLessThan(70)
+  })
+
+  it('recalculates after caption and viewport changes and can grow a mobile flow slot again', async () => {
+    document.getElementById('live-fit-test-style')!.textContent += '.live-photo-slot { --print-flow:1; max-height:420px; }'
+    api.getGallery.mockResolvedValue({ items: [{ ...mockGallery[0], width: 1800, height: 900 }], nextCursor: null })
+    render(tree('solemnisation'))
+    const photo = await screen.findByRole('img', { name: mockGallery[0].guestMessage! })
+    const frame = photo.closest('figure')!
+    const firstHeight = Number.parseFloat(frame.style.height)
+    slotWidth = 280
+    act(() => { for (const observer of observers) observer.notify() })
+    expect(Number.parseFloat(frame.style.height)).toBeLessThan(firstHeight)
+    slotWidth = 600
+    captionHeight = 36
+    act(() => { for (const observer of observers) observer.notify() })
+    expect(Number.parseFloat(frame.style.width)).toBeCloseTo(600)
+    expect(Number.parseFloat(frame.style.height)).toBeGreaterThan(firstHeight)
+    expect(frameRatio(frame)).toBeCloseTo(2)
   })
 })

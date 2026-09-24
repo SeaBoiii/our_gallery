@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LocaleProvider } from '../context/LocaleContext'
 import { GalleryVisibilityContext, type GalleryVisibilityContextValue } from '../context/gallery-visibility-context'
 import type { EventSlug, PublicGalleryConfig } from '../../shared/contracts'
-import { DEFAULT_PHOTO_CROP, getBoothLayout } from '../features/polaroid/render'
+import { DEFAULT_PHOTO_CROP, getBoothLayout, getPhotoGeometry } from '../features/polaroid/render'
 import type { BoothLayout, BoothPhoto, BoothSettings, LoadedPhoto } from '../features/polaroid/types'
 import PolaroidPage from './PolaroidPage'
 
@@ -15,8 +15,8 @@ vi.mock('../features/polaroid/render', async importOriginal => {
   return { ...actual, loadPolaroidPhoto: engine.load, drawPhotobooth: engine.draw, exportPhotobooth: engine.export, boothPositionDelta: engine.pan }
 })
 vi.mock('../features/polaroid/CameraCapture', () => ({
-  CameraCapture: ({ shotCount = 1, onComplete, onClose }: { shotCount?: 1 | 4; onComplete: (files: File[]) => void; onClose: () => void }) => (
-    <div role="dialog" aria-label="Camera">
+  CameraCapture: ({ shotCount = 1, aspectRatio, onComplete, onClose }: { shotCount?: 1 | 4; aspectRatio?: number; onComplete: (files: File[]) => void; onClose: () => void }) => (
+    <div role="dialog" aria-label="Camera" data-aspect-ratio={aspectRatio}>
       <button onClick={() => onComplete(Array.from({ length: shotCount }, (_, index) => new File([`camera-${index + 1}`], `camera-${index + 1}.jpg`, { type: 'image/jpeg' })))}>Complete {shotCount}-photo camera session</button>
       <button onClick={onClose}>Cancel camera session</button>
     </div>
@@ -186,8 +186,11 @@ describe('Wedding photo booth', () => {
     fireEvent.change(screen.getByRole('slider', { name: 'Zoom' }), { target: { value: '1.3' } })
     await user.click(screen.getByRole('button', { name: 'Photo 2' }))
     fireEvent.change(screen.getByRole('slider', { name: 'Zoom' }), { target: { value: '2' } })
+    fireEvent.change(screen.getByRole('slider', { name: 'Left / right' }), { target: { value: '0.6' } })
+    fireEvent.change(screen.getByRole('slider', { name: 'Up / down' }), { target: { value: '-0.4' } })
     const replacement = queuePhotos(1)[0]
     await user.click(screen.getByRole('button', { name: 'Retake photo' }))
+    expect(screen.getByRole('dialog', { name: 'Camera' })).toHaveAttribute('data-aspect-ratio', String(4 / 3))
     await user.click(within(screen.getByRole('dialog', { name: 'Camera' })).getByRole('button', { name: 'Complete 1-photo camera session' }))
     await ready()
 
@@ -197,6 +200,54 @@ describe('Wedding photo booth', () => {
     expect(drawnPhotos()[1]?.crop).toEqual(DEFAULT_PHOTO_CROP)
     expect(screen.getByRole('button', { name: 'Photo 2' })).toHaveAttribute('aria-pressed', 'true')
     expect(engine.load.mock.lastCall![0].name).toBe('camera-1.jpg')
+    expect(photos[1].dispose).toHaveBeenCalledOnce()
+    ;[photos[0], photos[2], photos[3]].forEach(photo => expect(photo.dispose).not.toHaveBeenCalled())
+  })
+
+  it.each([
+    { label: /^Classic strip/, aspectRatio: 4 / 3, count: 4 },
+    { label: /^Four-frame print/, aspectRatio: 1, count: 4 },
+    { label: /^One Polaroid/, aspectRatio: 1, count: 1 },
+  ])('uses the chosen photo-slot aspect $aspectRatio for $count camera poses and individual retakes', async ({ label, aspectRatio, count }) => {
+    const { user } = setup()
+    await fillFour(user)
+    await user.click(screen.getByRole('button', { name: label }))
+    await user.click(screen.getByRole('button', { name: count === 4 ? 'Start photo booth' : 'Take one photo' }))
+    expect(screen.getByRole('dialog', { name: 'Camera' })).toHaveAttribute('data-aspect-ratio', String(aspectRatio))
+    expect(screen.getByRole('button', { name: `Complete ${count}-photo camera session` })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Cancel camera session' }))
+    if (count === 4) await user.click(screen.getByRole('button', { name: 'Photo 3' }))
+    await user.click(screen.getByRole('button', { name: 'Retake photo' }))
+    expect(screen.getByRole('dialog', { name: 'Camera' })).toHaveAttribute('data-aspect-ratio', String(aspectRatio))
+    expect(screen.getByRole('button', { name: 'Complete 1-photo camera session' })).toBeVisible()
+  })
+
+  it.each([
+    { orientation: 'portrait', width: 3000, height: 4000 },
+    { orientation: 'wide', width: 4000, height: 2250 },
+  ])('centers a $orientation photo from the guest’s camera when replacing an edited slot, preserving the other edits', async ({ width, height }) => {
+    const { user } = setup()
+    const { photos } = await fillFour(user)
+    fireEvent.change(screen.getByRole('slider', { name: 'Zoom' }), { target: { value: '1.5' } })
+    fireEvent.change(screen.getByRole('slider', { name: 'Left / right' }), { target: { value: '-0.3' } })
+    await user.click(screen.getByRole('button', { name: 'Photo 2' }))
+    fireEvent.change(screen.getByRole('slider', { name: 'Zoom' }), { target: { value: '2' } })
+    await user.click(screen.getByRole('button', { name: 'Rotate photo' }))
+    fireEvent.change(screen.getByRole('slider', { name: 'Left / right' }), { target: { value: '0.8' } })
+    fireEvent.change(screen.getByRole('slider', { name: 'Up / down' }), { target: { value: '-0.6' } })
+    const replacement = { ...goodPhoto(), width, height }
+    engine.load.mockResolvedValueOnce(replacement)
+    await user.click(screen.getByRole('button', { name: 'Replace photo' }))
+    await user.upload(chooser(), file('own-camera.jpg'))
+    await ready()
+
+    expect(drawnPhotos().map(entry => entry?.photo)).toEqual([photos[0], replacement, photos[2], photos[3]])
+    expect(drawnPhotos()[0]?.crop).toEqual({ ...DEFAULT_PHOTO_CROP, zoom: 1.5, positionX: -0.3 })
+    const entry = drawnPhotos()[1]!
+    expect(entry.crop).toEqual(DEFAULT_PHOTO_CROP)
+    const source = getPhotoGeometry(entry.photo.width, entry.photo.height, entry.crop, getBoothLayout('strip').photoRects[1]).sourceCrop
+    expect(source.x + source.width / 2).toBeCloseTo(width / 2)
+    expect(source.y + source.height / 2).toBeCloseTo(height / 2)
     expect(photos[1].dispose).toHaveBeenCalledOnce()
     ;[photos[0], photos[2], photos[3]].forEach(photo => expect(photo.dispose).not.toHaveBeenCalled())
   })

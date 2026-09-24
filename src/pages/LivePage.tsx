@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type RefObject } from 'react'
 import { ArrowUpRight, Expand, ImageOff, Minimize, Pause, Plane, Play, RefreshCw } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
+import { useInRouterContext, useLocation } from 'react-router-dom'
 import type { EventSlug, GalleryMedia, PublicGalleryConfig } from '../../shared/contracts'
 import { LanguageToggle } from '../components/LanguageToggle'
 import { PUBLIC_GALLERY_URL } from '../config'
@@ -10,17 +11,81 @@ import { useGalleryVisibility } from '../context/useGalleryVisibility'
 import { copy } from '../i18n/copy'
 import { WeddingMonogram } from '../components/WeddingMonogram'
 import { eventDateLabel, galleryDateLabel } from '../utils/date'
+import { fitLivePrint, mediaAspectRatio, type LivePrintSize } from '../utils/livePrint'
 
 type Source = 'all' | EventSlug
+type QrSide = 'left' | 'right'
 const JOURNAL_LAYOUTS = 6
 
-function LiveScrap({ item, position }: { item: GalleryMedia; position: number }) {
+function qrSideFromSearch(search: string): QrSide {
+  return new URLSearchParams(search).get('qr') === 'left' ? 'left' : 'right'
+}
+
+function subscribeToSearch(onChange: () => void) {
+  window.addEventListener('popstate', onChange)
+  return () => window.removeEventListener('popstate', onChange)
+}
+
+const currentSearch = () => window.location.search
+
+function LivePrint({ item, position, paused = false, videoRef }: { item: GalleryMedia; position?: number; paused?: boolean; videoRef?: RefObject<HTMLVideoElement | null> }) {
+  const { locale } = useLocale()
+  const t = copy[locale].live
+  const decorative = position !== undefined
+  const source = decorative ? item.thumbnailUrl || item.displayUrl : item.displayUrl
   const [failed, setFailed] = useState(false)
+  const [natural, setNatural] = useState<{ source: string | null; aspect: number } | null>(null)
+  const [fitted, setFitted] = useState<LivePrintSize | null>(null)
+  const slotRef = useRef<HTMLDivElement>(null)
+  const frameRef = useRef<HTMLElement>(null)
+  const captionRef = useRef<HTMLElement>(null)
+  const aspect = natural?.source === source ? natural.aspect : mediaAspectRatio(item.width, item.height)
+
+  useLayoutEffect(() => {
+    const slot = slotRef.current
+    const frame = frameRef.current
+    const caption = captionRef.current
+    if (!slot || !frame || !caption || !aspect || failed) return
+    let active = true
+    const measure = () => {
+      if (!active) return
+      const box = slot.getBoundingClientRect()
+      const slotStyle = getComputedStyle(slot)
+      const frameStyle = getComputedStyle(frame)
+      const px = (value: string) => Number.parseFloat(value) || 0
+      // Mobile slots shrink to the fitted print, but their CSS maximum remains
+      // the sizing constraint so a later wider viewport can grow the print again.
+      const flow = slotStyle.getPropertyValue('--print-flow').trim() === '1'
+      const maxHeight = flow ? px(slotStyle.maxHeight) : box.height
+      const insets = {
+        width: px(frameStyle.paddingLeft) + px(frameStyle.paddingRight) + px(frameStyle.borderLeftWidth) + px(frameStyle.borderRightWidth),
+        height: px(frameStyle.paddingTop) + px(frameStyle.paddingBottom) + px(frameStyle.borderTopWidth) + px(frameStyle.borderBottomWidth) + caption.offsetHeight,
+      }
+      const next = fitLivePrint({ width: box.width, height: maxHeight || box.height }, aspect, insets, px(frameStyle.rotate))
+      if (next) setFitted(previous => previous && Math.abs(previous.width - next.width) < .1 && Math.abs(previous.height - next.height) < .1 && Math.abs(previous.boundsHeight - next.boundsHeight) < .1 ? previous : next)
+    }
+    measure()
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure)
+    observer?.observe(slot)
+    observer?.observe(caption)
+    window.addEventListener('resize', measure)
+    void document.fonts?.ready.then(measure)
+    return () => { active = false; observer?.disconnect(); window.removeEventListener('resize', measure) }
+  }, [aspect, failed, source, locale])
+
+  const readNaturalSize = (width: number, height: number) => {
+    const nextAspect = mediaAspectRatio(width, height)
+    if (nextAspect) setNatural({ source, aspect: nextAspect })
+  }
   if (failed) return null
-  return <figure className={`live-scrap live-scrap--${position}`} aria-hidden="true">
-    <img src={item.thumbnailUrl || item.displayUrl} alt="" decoding="async" onError={() => setFailed(true)} />
-    <figcaption>A <i>&amp;</i> N <span>·</span> {String(position + 1).padStart(2, '0')}</figcaption>
-  </figure>
+  return <div ref={slotRef} className={decorative ? `live-scrap-slot live-scrap-slot--${position}` : 'live-photo-slot'} style={fitted ? { '--print-slot-height': `${fitted.boundsHeight}px` } as CSSProperties : undefined} aria-hidden={decorative || undefined}>
+    <figure ref={frameRef} className={decorative ? `live-scrap live-scrap--${position}` : 'live-media'} aria-hidden={decorative || undefined} data-fitted={Boolean(fitted)} data-narrow={Boolean(fitted && fitted.width < 150)} style={fitted ? { width: fitted.width, height: fitted.height } : undefined}>
+      {item.mediaType === 'video' && !decorative
+        ? <video ref={videoRef} src={source} poster={item.thumbnailUrl} autoPlay={!paused} muted loop playsInline preload="auto" onLoadedMetadata={event => readNaturalSize(event.currentTarget.videoWidth, event.currentTarget.videoHeight)} aria-label={item.guestMessage || `${t.memoryFrom} ${eventDateLabel(item.event.slug, locale)}`} />
+        : <img src={source} alt={decorative ? '' : item.guestMessage || `${t.memoryFrom} ${eventDateLabel(item.event.slug, locale)}`} decoding={decorative ? 'async' : undefined} onLoad={event => readNaturalSize(event.currentTarget.naturalWidth, event.currentTarget.naturalHeight)} onError={decorative ? () => setFailed(true) : undefined} />}
+      <figcaption ref={captionRef}>{decorative ? <>A <i>&amp;</i> N <span>·</span> {String(position + 1).padStart(2, '0')}</> : <><span>{t.memoryLog}</span><Plane size={13} aria-hidden="true" /><span>A &amp; N</span></>}</figcaption>
+    </figure>
+  </div>
 }
 
 /** Freeze a spread's selection while it is on screen, but never retain revoked media. */
@@ -31,7 +96,7 @@ function LiveCompanions({ items, currentId, recent }: { items: GalleryMedia[]; c
   })
   return ids.map((id, position) => {
     const item = items.find(candidate => candidate.id === id && candidate.mediaType === 'photo' && candidate.id !== currentId)
-    return item ? <LiveScrap key={`${id}:${item.thumbnailUrl || item.displayUrl}`} item={item} position={position} /> : null
+    return item ? <LivePrint key={`${id}:${item.thumbnailUrl || item.displayUrl}`} item={item} position={position} /> : null
   })
 }
 
@@ -46,6 +111,16 @@ function LiveBrand({ config }: { config: PublicGalleryConfig | null }) {
     <div className="live-brand-mark"><WeddingMonogram compact /></div>
     <div><p className="live-brand-kicker">{wallCopy[locale].wedding}<span aria-hidden="true"> / </span>{copy[locale].live.flightMemories}</p><h1>Aleem <em>&amp;</em> Nurulain</h1><p className="live-date">{galleryDateLabel(config?.mode ?? null, locale)}</p></div>
   </div>
+}
+
+function LiveQr() {
+  const { locale } = useLocale()
+  const w = wallCopy[locale]
+  return <aside className="live-qr" aria-label={copy[locale].qr.aria}>
+    <div className="live-qr-route" aria-hidden="true"><span>SIN</span><i /><Plane size={15} /><i /><span>∞</span></div>
+    <div className="live-qr-code"><QRCodeSVG value={PUBLIC_GALLERY_URL} size={192} level="H" marginSize={4} bgColor="#fffdf8" fgColor="#081b31" title={copy[locale].qr.scanTitle} /></div>
+    <div className="live-qr-copy"><p className="eyebrow">{copy[locale].live.scan}</p><p>{w.share}</p><span>{w.wedding}<i aria-hidden="true"> · </i>{w.forever}</span></div>
+  </aside>
 }
 
 function chooseNext(items: GalleryMedia[], recent: string[], current?: string) {
@@ -102,13 +177,30 @@ async function findPreloadedNext(items: GalleryMedia[], recent: string[], curren
 }
 
 export default function LivePage() {
+  // Route-aware navigation in the app; standalone rendering remains useful for
+  // embeds and tests, including browser back/forward query changes.
+  const routed = useInRouterContext()
+  return routed ? <RoutedLivePage /> : <StandaloneLivePage />
+}
+
+function RoutedLivePage() {
+  const { search } = useLocation()
+  return <LivePageContent qrSide={qrSideFromSearch(search)} />
+}
+
+function StandaloneLivePage() {
+  const search = useSyncExternalStore(subscribeToSearch, currentSearch, () => '')
+  return <LivePageContent qrSide={qrSideFromSearch(search)} />
+}
+
+function LivePageContent({ qrSide }: { qrSide: QrSide }) {
   const { config, status, refresh } = useGalleryVisibility()
   const { locale } = useLocale()
   if (!config) return <main className="live-wall live-wall--waiting"><div className="live-sky" aria-hidden="true" /><header className="live-header"><LiveBrand config={null} /><LanguageToggle /></header><section className="live-empty" role={status === 'error' ? 'alert' : 'status'}><Plane aria-hidden="true" /><p className="eyebrow">{wallCopy[locale].wall}</p><h2>{wallCopy[locale].wedding}</h2><p>{status === 'error' ? (locale === 'en' ? 'The gallery is temporarily unavailable.' : 'Galeri tidak tersedia buat sementara waktu.') : copy[locale].preparing}</p>{status === 'error' ? <button type="button" onClick={() => void refresh().catch(() => undefined)}><RefreshCw size={16} aria-hidden="true" />{copy[locale].tryAgain}</button> : null}</section></main>
-  return <ConfiguredLivePage key={`${config.mode}|${config.revision}`} config={config} />
+  return <ConfiguredLivePage key={`${config.mode}|${config.revision}`} config={config} qrSide={qrSide} />
 }
 
-function ConfiguredLivePage({ config }: { config: PublicGalleryConfig }) {
+function ConfiguredLivePage({ config, qrSide }: { config: PublicGalleryConfig; qrSide: QrSide }) {
   const { locale } = useLocale()
   const t = copy[locale].live
   const w = wallCopy[locale]
@@ -239,16 +331,14 @@ function ConfiguredLivePage({ config }: { config: PublicGalleryConfig }) {
         {controlError ? <p className="live-control-error" role="alert">{w.fullscreenError}</p> : null}
       </header>
 
-      <div className="live-stage">
+      <div className={`live-stage${qrSide === 'left' ? ' live-stage--qr-left' : ''}`} data-qr-side={qrSide}>
+      {qrSide === 'left' ? <LiveQr /> : null}
       {current ? (
         <section className={`live-memory${current.mediaType === 'video' ? ' live-memory--video' : ''}`} key={current.id} aria-label={w.wall}>
           <svg className="live-journal-route" viewBox="0 0 1000 700" preserveAspectRatio="none" fill="none" aria-hidden="true"><path d="M65 560C150 655 440 610 390 440S660 70 855 145C965 190 905 350 825 300S940 50 970 75" /><circle cx="65" cy="560" r="6" /><circle cx="970" cy="75" r="6" /></svg>
           <div className="live-postmark" aria-hidden="true"><span>SINGAPORE</span><Plane strokeWidth={1} /><span>{w.forever}</span></div>
           <LiveCompanions items={items} currentId={current.id} recent={layout.recent} />
-          <figure className="live-media">
-            {current.mediaType === 'video' ? <video ref={videoRef} src={current.displayUrl} poster={current.thumbnailUrl} autoPlay={!paused} muted loop playsInline preload="auto" aria-label={current.guestMessage || `${t.memoryFrom} ${eventDateLabel(current.event.slug, locale)}`} /> : <img src={current.displayUrl} alt={current.guestMessage || `${t.memoryFrom} ${eventDateLabel(current.event.slug, locale)}`} />}
-            <figcaption><span>{t.memoryLog}</span><Plane size={13} aria-hidden="true" /><span>A &amp; N</span></figcaption>
-          </figure>
+          <LivePrint item={current} paused={paused} videoRef={videoRef} />
           <div className="live-caption" role="region" aria-label={locale === 'en' ? 'Memory caption' : 'Kapsyen kenangan'} tabIndex={0}>
             <p className="eyebrow">{eventDateLabel(current.event.slug, locale)}</p>
             <div className="live-caption-rule" aria-hidden="true"><i /><Plane size={17} /><i /></div>
@@ -260,11 +350,7 @@ function ConfiguredLivePage({ config }: { config: PublicGalleryConfig }) {
         <section className="live-empty" role={error ? 'alert' : 'status'}><ImageOff aria-hidden="true" /><p className="eyebrow">{t.memoryLog}</p><h2>{t.boardingOne}<br /><em>{t.boardingTwo}</em></h2><p>{error || t.approvedAppear}</p>{error ? <button type="button" onClick={() => void refresh()}><RefreshCw size={16} aria-hidden="true" />{t.reconnect}</button> : null}</section>
       )}
 
-      <aside className="live-qr" aria-label={copy[locale].qr.aria}>
-        <div className="live-qr-route" aria-hidden="true"><span>SIN</span><i /><Plane size={15} /><i /><span>∞</span></div>
-        <div className="live-qr-code"><QRCodeSVG value={PUBLIC_GALLERY_URL} size={192} level="H" marginSize={4} bgColor="#fffdf8" fgColor="#081b31" title={copy[locale].qr.scanTitle} /></div>
-        <div className="live-qr-copy"><p className="eyebrow">{t.scan}</p><p>{w.share}</p><span>{w.wedding}<i aria-hidden="true"> · </i>{w.forever}</span></div>
-      </aside>
+      {qrSide === 'right' ? <LiveQr /> : null}
       </div>
       <footer className="live-footer"><span className="live-footer-label"><Plane size={15} aria-hidden="true" />{t.flightMemories}</span><a href={PUBLIC_GALLERY_URL}>gallery.aleemxnurul.love<ArrowUpRight size={14} aria-hidden="true" /></a><span className="live-status" role="status"><i aria-hidden="true" />{error || (paused ? w.paused : t.approved)}</span></footer>
     </main>

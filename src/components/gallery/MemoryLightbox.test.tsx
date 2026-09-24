@@ -208,12 +208,11 @@ describe('MemoryLightbox', () => {
     expect(screen.queryByRole('button', { name: 'Try loading again' })).not.toBeInTheDocument()
   })
 
-  it('keeps caption scrolling separate from photo swipes and keyboard navigation', () => {
+  it('keeps caption gestures separate from photo swipes while the body supports keyboard navigation', () => {
     const onIndexChange = vi.fn()
     const onClose = vi.fn()
-    renderLightbox({ items: [memory, videoMemory], onIndexChange, onClose })
-    const notes = screen.getByLabelText('Memory notes')
-    fireEvent.keyDown(notes, { key: 'ArrowRight' })
+    const view = renderLightbox({ items: [memory, videoMemory], onIndexChange, onClose })
+    const notes = view.container.querySelector('figcaption')!
     fireEvent.touchStart(notes, { touches: [{ clientX: 200, clientY: 100 }] })
     fireEvent.touchEnd(notes, { changedTouches: [{ clientX: 30, clientY: 105 }] })
     expect(onIndexChange).not.toHaveBeenCalled()
@@ -223,6 +222,9 @@ describe('MemoryLightbox', () => {
     expect(onIndexChange).not.toHaveBeenCalled()
     fireEvent.touchStart(image, { touches: [{ clientX: 200, clientY: 100 }] })
     fireEvent.touchEnd(image, { changedTouches: [{ clientX: 30, clientY: 110 }] })
+    expect(onIndexChange).toHaveBeenCalledWith(1)
+    onIndexChange.mockClear()
+    fireEvent.keyDown(screen.getByRole('figure'), { key: 'ArrowRight' })
     expect(onIndexChange).toHaveBeenCalledWith(1)
     fireEvent.keyDown(notes, { key: 'Escape' })
     expect(onClose).toHaveBeenCalledOnce()
@@ -241,7 +243,8 @@ describe('MemoryLightbox', () => {
     expect(first).toHaveFocus()
     fireEvent.keyDown(first, { key: 'Tab', shiftKey: true })
     expect(last).toHaveFocus()
-    expect(screen.getByLabelText('Memory notes')).toHaveAttribute('tabindex', '0')
+    expect(screen.getByRole('figure')).toHaveAttribute('tabindex', '0')
+    expect(view.container.querySelector('figcaption')).not.toHaveAttribute('tabindex')
     view.unmount()
     expect(trigger).toHaveFocus()
     opener.unmount()
@@ -259,12 +262,32 @@ describe('MemoryLightbox', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('The link could not be copied.')
   })
 
-  it('localizes the journal and blank-caption state without inventing a guest message', () => {
+  it('shows only a localized event date for a memory without a guest message or name', () => {
     window.localStorage.setItem('an-gallery-locale', 'ms')
-    renderLightbox({ items: [{ ...memory, guestName: null, guestMessage: null }] })
+    const view = renderLightbox({ items: [{ ...memory, guestName: null, guestMessage: null, createdAt: '2027-09-10T12:00:00Z' }] })
     expect(screen.getByText('Jurnal perkahwinan')).toBeVisible()
-    expect(screen.getByLabelText('Catatan kenangan')).toHaveTextContent('Detik untuk dikenang.')
-    expect(screen.getByRole('heading', { name: '21 Ogos 2027' })).toBeVisible()
-    expect(screen.getByLabelText('Catatan kenangan').querySelector('blockquote')).toBeNull()
+    const notes = view.container.querySelector('figcaption')!
+    expect(notes).toHaveTextContent(/^21 OGOS 2027$/)
+    expect(notes.querySelector('time')).toHaveAttribute('datetime', '2027-08-21')
+    expect(notes.querySelector('blockquote')).toBeNull()
+    expect(notes.querySelector('h2')).toBeNull()
+    expect(notes).not.toHaveAttribute('tabindex')
+    expect(notes).not.toHaveAttribute('aria-label')
+  })
+
+  it('preserves a long wish and attribution, then returns the whole body to its photograph on navigation', () => {
+    const message = 'May your days be filled with love, laughter and wonderful memories together. '.repeat(3)
+    const first = { ...memory, guestMessage: message }
+    const view = renderLightbox({ items: [first, videoMemory] })
+    const notes = view.container.querySelector('figcaption')!
+    expect(notes.querySelector('blockquote')).toHaveTextContent(message.trim())
+    expect(notes).toHaveTextContent('Shared by A guest')
+    expect(notes.querySelector('time')).toHaveTextContent('21 AUG 2027')
+    expect(notes.querySelector('h2,svg')).toBeNull()
+    const body = screen.getByRole('figure')
+    body.scrollTop = 240
+    view.rerender(<LocaleProvider><MemoryLightbox {...view.props} index={1} /></LocaleProvider>)
+    expect(body.scrollTop).toBe(0)
+    expect(screen.getByRole('button', { name: 'Next memory' })).toBeEnabled()
   })
 })

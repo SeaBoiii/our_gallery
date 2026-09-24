@@ -43,6 +43,16 @@ Each slide keeps its arrangement and companion selection through background poll
 
 Journal validation: 388 tests across 45 files, lint and the production build pass. Fifteen live-wall tests cover six-layout cycling, pause/polling stability, companion removal, source/day transitions, late responses, single photos and videos. Independent geometry review checked rotation clearance and caption placement, including 24 aspect-ratio/viewport combinations for the closest spread.
 
+## Presentation and framing adjustments
+
+The live-wall ivory mounts now follow each image's own proportions inside the existing scattered layout bounds. The original monogram is presented in a light treatment directly on navy. `/live` keeps the QR slip on the right; `/live?qr=left` moves it to the left, and `/live?qr=right` selects the default explicitly. The QR still links to the public gallery. On small screens the left variant precedes the photographs and the default follows them.
+
+The image viewer's note is reduced to the guest's message, shared-by credit and a small wedding date. The displayed date comes from the media's wedding album: the API does not contain a verified camera capture timestamp. Notes expand naturally instead of using a nested scroll area; the viewer body can scroll for longer messages. Mobile and tablet journal browsing keeps smaller, varied-size prints in staggered rows, with gentle rotations, natural photo proportions and tap-to-open viewing.
+
+The photobooth camera viewfinder and captured image use the active layout's centred photo window: 4:3 for strips and square for grid/single frames. This avoids previewing the full camera sensor and then unexpectedly cropping it only after insertion. Replacement files start with a centred crop while existing edits remain attached to their own photos.
+
+Validation: 424 tests across 46 files, lint and the frontend production build (including Worker type checks) pass. New coverage includes fitted image dimensions, resize recovery, QR address navigation, centred camera capture and replacement crops, and simplified viewer notes. Static geometry review checked mobile print clearance across 320–959px; browser screenshots and physical-camera testing were unavailable.
+
 ## Scope and validation
 
 The home page and administration are gallery-only. Old `/guestbook` links redirect to `/gallery`; the public greeting API is retired. Historical data and migrations remain intact. Media uploads, approval, original files, day associations and the original download-release date remain in place.

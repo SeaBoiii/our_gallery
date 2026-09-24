@@ -2,9 +2,11 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Camera, RotateCcw, X } from 'lucide-react'
 import { useLocale } from '../../context/useLocale'
 import { useModalFocus } from '../../hooks/useModalFocus'
+import { DEFAULT_PHOTO_CROP, getPhotoGeometry, MAX_PHOTO_DIMENSION } from './render'
 
 type Props = {
   shotCount?: 1 | 4
+  aspectRatio?: number
   onComplete?: (files: File[]) => void
   onCapture?: (file: File) => void
   onClose: () => void
@@ -71,7 +73,7 @@ function cameraError(error: unknown): CameraError {
   return 'busy'
 }
 
-export function CameraCapture({ shotCount = 1, onComplete, onCapture, onClose }: Props) {
+export function CameraCapture({ shotCount = 1, aspectRatio = 4 / 3, onComplete, onCapture, onClose }: Props) {
   const { locale } = useLocale()
   const t = messages[locale]
   const titleId = useId()
@@ -92,6 +94,7 @@ export function CameraCapture({ shotCount = 1, onComplete, onCapture, onClose }:
   const [countdown, setCountdown] = useState<number | null>(null)
   const [currentShot, setCurrentShot] = useState(1)
   const [completedShots, setCompletedShots] = useState(0)
+  const captureAspectRatio = Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : 4 / 3
 
   useModalFocus(dialogRef, true)
 
@@ -146,7 +149,7 @@ export function CameraCapture({ shotCount = 1, onComplete, onCapture, onClose }:
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
-        video: { facingMode: { ideal: 'user' }, width: { ideal: 1920 }, height: { ideal: 1440 } },
+        video: { facingMode: { ideal: 'user' }, width: { ideal: 1920 }, height: { ideal: Math.round(1920 / captureAspectRatio) }, aspectRatio: { ideal: captureAspectRatio } },
       })
       // A permission prompt can resolve after the dialog has already closed.
       if (!isCurrent(generation)) {
@@ -168,7 +171,7 @@ export function CameraCapture({ shotCount = 1, onComplete, onCapture, onClose }:
     } catch (reason) {
       if (isCurrent(generation)) fail(cameraError(reason))
     }
-  }, [fail, invalidate, isCurrent])
+  }, [captureAspectRatio, fail, invalidate, isCurrent])
 
   const close = useCallback(() => {
     if (!activeRef.current || closingRef.current) return
@@ -215,11 +218,16 @@ export function CameraCapture({ shotCount = 1, onComplete, onCapture, onClose }:
       return
     }
     try {
-      // Bound the bitmap allocation even when a camera provides a 4K stream.
-      const scale = Math.min(1, 2400 / Math.max(video.videoWidth, video.videoHeight))
+      // Match the viewfinder's centered cover crop to the final photo slot.
+      // Camera aspect hints are optional: portrait and wide sensors still use
+      // exactly the same framing as the preview and the finished print.
+      const crop = getPhotoGeometry(video.videoWidth, video.videoHeight, DEFAULT_PHOTO_CROP, {
+        x: 0, y: 0, width: captureAspectRatio, height: 1,
+      }).sourceCrop
+      const scale = Math.min(1, MAX_PHOTO_DIMENSION / Math.max(crop.width, crop.height))
       const canvas = document.createElement('canvas')
-      canvas.width = Math.max(1, Math.round(video.videoWidth * scale))
-      canvas.height = Math.max(1, Math.round(video.videoHeight * scale))
+      canvas.width = Math.max(1, Math.round(crop.width * scale))
+      canvas.height = Math.max(1, Math.round(crop.height * scale))
       const context = canvas.getContext('2d')
       if (!context) {
         fail('capture')
@@ -229,7 +237,7 @@ export function CameraCapture({ shotCount = 1, onComplete, onCapture, onClose }:
         context.translate(canvas.width, 0)
         context.scale(-1, 1)
       }
-      context.drawImage(video, 0, 0, canvas.width, canvas.height)
+      context.drawImage(video, crop.x, crop.y, crop.width, crop.height, 0, 0, canvas.width, canvas.height)
       // A session keeps its live stream between poses; the final frame releases it.
       if (shotIndex === shotCount - 1) stopStream()
       canvas.toBlob((blob) => {
@@ -311,7 +319,7 @@ export function CameraCapture({ shotCount = 1, onComplete, onCapture, onClose }:
             >{index + 1}</li>)}
           </ol>
         </div>}
-        <div className="camera-viewfinder" aria-busy={status === 'loading'}>
+        <div className="camera-viewfinder" aria-busy={status === 'loading'} style={{ aspectRatio: captureAspectRatio, maxWidth: `${52 * captureAspectRatio}dvh` }}>
           <video
             ref={videoRef}
             className="camera-video"

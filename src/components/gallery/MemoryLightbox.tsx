@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, Download, LoaderCircle, Plane, RefreshCw, Share2, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download, LoaderCircle, RefreshCw, Share2, X } from 'lucide-react'
 import type { GalleryMedia } from '../../../shared/contracts'
 import { useLocale } from '../../context/useLocale'
 import { useModalFocus } from '../../hooks/useModalFocus'
@@ -21,7 +21,7 @@ type Toast = { key: number; itemId: string; message: string; tone: 'status' | 'e
 
 function blocksLightboxArrows(target: EventTarget | null) {
   if (!(target instanceof Element)) return false
-  return Boolean(target.closest('video, input, textarea, select, [contenteditable="true"], [role="slider"], [role="textbox"], [data-lightbox-scroll]'))
+  return Boolean(target.closest('video, input, textarea, select, [contenteditable="true"], [role="slider"], [role="textbox"]'))
 }
 
 export function MemoryLightbox({ items, index, downloadsAvailable, onClose, onDownloadsLocked, onIndexChange, onRefresh }: Props) {
@@ -31,6 +31,7 @@ export function MemoryLightbox({ items, index, downloadsAvailable, onClose, onDo
   const itemCount = items.length
   const canNavigate = itemCount > 1
   const dialogRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLElement>(null)
   const touchStart = useRef<{ x: number; y: number } | null>(null)
   const refreshedUrl = useRef<string | null>(null)
   const refreshSequence = useRef(0)
@@ -53,6 +54,7 @@ export function MemoryLightbox({ items, index, downloadsAvailable, onClose, onDo
   useEffect(() => {
     refreshSequence.current += 1
     touchStart.current = null
+    if (contentRef.current) contentRef.current.scrollTop = 0
   }, [item?.id, item?.displayUrl])
 
   useEffect(() => {
@@ -98,8 +100,10 @@ export function MemoryLightbox({ items, index, downloadsAvailable, onClose, onDo
   const currentMediaStatus = mediaState?.itemId === item.id && mediaState.url === item.displayUrl ? mediaState.status : 'loading'
   const downloadBusy = downloadBusyId === item.id
   const journal = locale === 'ms'
-    ? { label: 'Jurnal perkahwinan', note: 'Detik untuk dikenang.', details: 'Catatan kenangan', keyboard: 'Anak panah untuk melihat · Esc untuk tutup' }
-    : { label: 'Wedding journal', note: 'A moment to keep.', details: 'Memory notes', keyboard: 'Arrow keys to browse · Esc to close' }
+    ? { label: 'Jurnal perkahwinan', keyboard: 'Anak panah untuk melihat · Esc untuk tutup' }
+    : { label: 'Wedding journal', keyboard: 'Arrow keys to browse · Esc to close' }
+  const guestMessage = item.guestMessage?.trim()
+  const guestName = item.guestName?.trim()
 
   const announce = (message: string, tone: Toast['tone'] = 'status') => {
     if (!mounted.current) return
@@ -203,7 +207,7 @@ export function MemoryLightbox({ items, index, downloadsAvailable, onClose, onDo
         </div>
       </div>
 
-      <figure className={`lightbox-content${item.mediaType === 'video' ? ' lightbox-content--video' : ''}`}>
+      <figure ref={contentRef} className={`lightbox-content${item.mediaType === 'video' ? ' lightbox-content--video' : ''}`} tabIndex={0}>
         <div className="lightbox-stage"
         onTouchStart={item.mediaType === 'photo' && canNavigate ? (event) => {
           const touch = event.touches.length === 1 ? event.touches[0] : null
@@ -260,13 +264,10 @@ export function MemoryLightbox({ items, index, downloadsAvailable, onClose, onDo
           </div>
         ) : null}
         </div>
-        <figcaption className="lightbox-notes" tabIndex={0} data-lightbox-scroll aria-label={journal.details}>
-          <p className="lightbox-note-label">{copy[locale].flightMemories}</p>
-          <h2>{eventName}</h2>
-          <div className="lightbox-note-rule" aria-hidden="true"><span /><Plane size={18} strokeWidth={1.2} /><span /></div>
-          {item.guestMessage ? <blockquote>“{item.guestMessage}”</blockquote> : <p className="lightbox-note-empty">{journal.note}</p>}
-          {item.guestName ? <p className="lightbox-guest"><span>{t.sharedBy}</span><strong>{item.guestName}</strong></p> : null}
-          <p className="lightbox-note-reference"><span>{t[item.mediaType]}</span><span>{eventDate}</span></p>
+        <figcaption className="lightbox-notes">
+          {guestMessage ? <blockquote>“{guestMessage}”</blockquote> : null}
+          {guestName ? <p className="lightbox-guest"><span>{t.sharedBy}</span>{' '}<strong>{guestName}</strong></p> : null}
+          <time className="lightbox-note-reference" dateTime={item.event.eventDate}>{eventDate}</time>
         </figcaption>
       </figure>
 

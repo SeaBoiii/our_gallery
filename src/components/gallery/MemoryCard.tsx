@@ -38,7 +38,7 @@ export function MemoryCard({ memory, onOpen, number = 1, view = 'journal' }: { m
         {imageSource ? <img
           src={imageSource}
           srcSet={responsiveSource}
-          sizes={responsiveSource ? view === 'grid' ? '(max-width: 639px) 44vw, (max-width: 959px) 29vw, 300px' : '(max-width: 639px) 88vw, (max-width: 959px) 44vw, 740px' : undefined}
+          sizes={responsiveSource ? view === 'grid' ? '(max-width: 639px) 44vw, (max-width: 959px) 29vw, 300px' : '(max-width: 639px) 60vw, (max-width: 959px) 60vw, 740px' : undefined}
           width={width || undefined}
           height={height || undefined}
           alt={memory.guestMessage || `${t.guestMemory} ${t.from} ${eventName}`}
