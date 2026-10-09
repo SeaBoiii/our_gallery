@@ -1,80 +1,76 @@
-﻿/* Navy viewing room with a separate ivory journal leaf. */
-.lightbox.lightbox--journal { position: fixed; z-index: 100; inset: 0; isolation: isolate; display: grid; grid-template-rows: auto minmax(0,1fr) auto; overflow: hidden; color: #f7f2e8; background: #081b31; overscroll-behavior: contain; }
-.lightbox--journal .lightbox-bar { display: flex; min-height: 88px; align-items: center; justify-content: space-between; gap: 20px; padding: max(16px,env(safe-area-inset-top)) max(28px,env(safe-area-inset-right)) 16px max(32px,env(safe-area-inset-left)); border-bottom: 1px solid #c4a36740; background: #081b31; }
-.lightbox--journal .lightbox-flight { display: grid; gap: 7px; margin: 0; font: 400 1.7rem/1 var(--serif); }
-.lightbox--journal .lightbox-flight > span { color: #c4a367; font: .55rem/1.5 var(--mono); letter-spacing: .16em; text-transform: uppercase; }
-.lightbox--journal .lightbox-actions { display: flex; gap: 9px; }
-.lightbox--journal .lightbox-actions button,.lightbox--journal .lightbox-arrow { display: grid; flex: 0 0 auto; place-items: center; width: 46px; height: 46px; padding: 0; border: 1px solid #c4a36770; border-radius: 2px; color: #dcc59a; background: transparent; transition: border-color 160ms,background-color 160ms,color 160ms; }
-.lightbox--journal .lightbox-actions .lightbox-close { margin-left: 5px; border-color: #f7f2e8; color: #081b31; background: #f7f2e8; }
+/* Viewer: a midnight viewing room, the photograph uncropped, and a paper note card. */
+.lightbox.lightbox--journal { position: fixed; z-index: 100; inset: 0; isolation: isolate; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; color: var(--paper); background: radial-gradient(120% 80% at 50% 0%, var(--navy-deep), var(--midnight) 70%); overscroll-behavior: contain; animation: lightbox-in 280ms var(--ease-out) both; }
+.lightbox--journal .lightbox-bar { display: flex; min-height: 72px; align-items: center; justify-content: space-between; gap: 16px; padding: max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 12px max(20px, env(safe-area-inset-left)); }
+.lightbox--journal .lightbox-flight { display: grid; gap: 4px; margin: 0; font: 400 1.4rem/1 var(--font-display); }
+.lightbox--journal .lightbox-flight > span { color: var(--gold); font: 500 var(--text-label)/1.4 var(--font-mono); letter-spacing: .12em; text-transform: uppercase; }
+.lightbox--journal .lightbox-actions { display: flex; gap: 8px; }
+.lightbox--journal .lightbox-actions button, .lightbox--journal .lightbox-arrow { display: grid; flex: 0 0 auto; place-items: center; width: 48px; height: 48px; padding: 0; border: 1px solid #ead3a259; border-radius: 50%; color: var(--gold-soft); background: #ffffff0d; transition: border-color 160ms, background-color 160ms, color 160ms; }
+.lightbox--journal .lightbox-actions .lightbox-close { border-color: var(--paper); color: var(--navy-deep); background: var(--paper); }
 .lightbox--journal .lightbox-actions button:disabled { cursor: wait; opacity: .55; }
-.lightbox--journal .lightbox-actions svg,.lightbox--journal .lightbox-arrow svg { width: 19px; height: 19px; stroke-width: 1.5; }
-.lightbox--journal button:focus-visible,.lightbox--journal video:focus-visible { outline: 2px solid #f7f2e8; outline-offset: 5px; }
-.lightbox--journal .lightbox-content { display: grid; grid-template-columns: minmax(0,1fr) minmax(235px,300px); grid-template-rows: minmax(min-content,1fr); align-items: center; gap: clamp(24px,4vw,64px); width: min(100%,1600px); min-width: 0; min-height: 0; justify-self: center; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: #c4a36770 #081b31; scrollbar-width: thin; margin: 0; padding: clamp(22px,3.4vw,48px) max(32px,env(safe-area-inset-right)) clamp(22px,3.4vw,48px) max(32px,env(safe-area-inset-left)); }
-.lightbox--journal .lightbox-content:focus-visible { outline: 2px solid #c4a367; outline-offset: -5px; }
-.lightbox--journal .lightbox-stage { position: relative; display: grid; grid-template: minmax(0,1fr) / minmax(0,1fr); place-items: center; align-self: start; min-width: 0; min-height: 0; height: max(160px,calc(100svh - 270px)); }
-.lightbox--journal .lightbox-media { grid-area: 1/1; display: block; width: auto; height: auto; max-width: 100%; max-height: 100%; min-width: 0; min-height: 0; border: clamp(6px,.8vw,12px) solid #f7f2e8; border-radius: 0; object-fit: contain; box-shadow: 0 18px 60px #0005; transition: opacity 180ms; }
-.lightbox--journal .lightbox-content--video .lightbox-media { width: 100%; height: 100%; border-width: 1px; border-color: #c4a36760; background: #050f1b; }
+.lightbox--journal .lightbox-actions svg, .lightbox--journal .lightbox-arrow svg { width: 20px; height: 20px; stroke-width: 1.6; }
+.lightbox--journal button:focus-visible, .lightbox--journal video:focus-visible { outline: 2px solid var(--gold-soft); outline-offset: 4px; }
+.lightbox--journal .lightbox-content { display: block; width: 100%; min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: #ead3a24d transparent; scrollbar-width: thin; margin: 0; padding: 8px max(16px, env(safe-area-inset-right)) 20px max(16px, env(safe-area-inset-left)); }
+.lightbox--journal .lightbox-content:focus-visible { outline: 2px solid var(--gold); outline-offset: -4px; }
+.lightbox--journal .lightbox-stage { position: relative; display: grid; grid-template: auto / minmax(0, 1fr); place-items: center; min-width: 0; min-height: 180px; }
+.lightbox--journal .lightbox-media { grid-area: 1 / 1; display: block; width: auto; height: auto; max-width: 100%; max-height: max(200px, calc(100svh - 260px)); min-width: 0; min-height: 0; border-radius: 6px; object-fit: contain; box-shadow: 0 30px 80px -20px #000a; transition: opacity 220ms; }
+.lightbox--journal .lightbox-content--video .lightbox-media { width: 100%; background: #020a10; }
 .lightbox--journal .lightbox-media.is-loading { opacity: .3; }
 .lightbox--journal .lightbox-media.is-error { opacity: .12; }
-.lightbox--journal .lightbox-media-status { z-index: 1; grid-area: 1/1; display: flex; align-items: center; justify-content: center; gap: 12px; width: min(360px,100%); min-height: 130px; padding: 24px; border: 1px solid #c4a36766; border-radius: 2px; color: #f7f2e8; background: #081b31f5; font-size: .75rem; line-height: 1.6; text-align: center; }
-.lightbox--journal .lightbox-media-status > svg { flex-shrink: 0; width: 20px; color: #c4a367; }
+.lightbox--journal .lightbox-media-status { z-index: 1; grid-area: 1 / 1; display: flex; align-items: center; justify-content: center; gap: 12px; width: min(360px, 100%); min-height: 120px; padding: 22px; border-radius: 14px; color: var(--paper); background: #052433f2; font-size: .9375rem; line-height: 1.5; text-align: center; }
+.lightbox--journal .lightbox-media-status > svg { flex-shrink: 0; width: 20px; color: var(--gold); }
 .lightbox--journal .lightbox-media-status.is-loading { pointer-events: none; }
 .lightbox--journal .lightbox-media-status.is-error { flex-direction: column; }
 .lightbox--journal .lightbox-media-status p { margin: 0; }
-.lightbox--journal .lightbox-media-status button { display: inline-flex; min-height: 44px; align-items: center; gap: 9px; padding: 9px 15px; border: 1px solid #c4a367; border-radius: 2px; color: #081b31; background: #dcc59a; font-size: .7rem; }
+.lightbox--journal .lightbox-media-status button { display: inline-flex; min-height: 48px; align-items: center; gap: 9px; padding: 0 18px; border: 0; border-radius: 999px; color: var(--navy-deep); background: var(--gold-soft); font-size: .9375rem; font-weight: 600; }
 .lightbox--journal .lightbox-media-status button svg { width: 16px; height: 16px; }
-.lightbox--journal .lightbox-content .lightbox-notes { display: grid; gap: 16px; min-width: 0; align-self: center; padding: clamp(22px,2.3vw,32px); border: 1px solid #c4a36775; border-radius: 0; color: #081b31; background: #f7f2e8; }
-.lightbox--journal .lightbox-notes blockquote { margin: 0; font: 400 clamp(1.35rem,2vw,1.75rem)/1.4 var(--serif); white-space: pre-wrap; overflow-wrap: anywhere; }
-.lightbox--journal .lightbox-guest { margin: 0; font-size: .78rem; line-height: 1.7; overflow-wrap: anywhere; }
-.lightbox--journal .lightbox-guest > span { color: #5b6672; }
-.lightbox--journal .lightbox-guest > strong { font-weight: 400; }
-.lightbox--journal .lightbox-note-reference { display: block; color: #6e624c; font: .58rem/1.6 var(--mono); letter-spacing: .04em; }
-.lightbox--journal .lightbox-navigation { display: grid; grid-template-columns: 46px minmax(100px,180px) 46px; justify-content: center; align-items: center; gap: 18px; min-height: 80px; padding: 12px 24px max(16px,env(safe-area-inset-bottom)); border-top: 1px solid #c4a36733; }
+.lightbox--journal .lightbox-content .lightbox-notes { display: grid; gap: 10px; width: min(100%, 560px); min-width: 0; margin: 18px auto 0; padding: 20px 22px; border-radius: var(--radius-paper); color: var(--ink); background: var(--paper); }
+.lightbox--journal .lightbox-notes:not(:has(blockquote, .lightbox-guest)) { padding-block: 14px; }
+.lightbox--journal .lightbox-notes blockquote { margin: 0; font: 400 1.4rem/1.35 var(--font-display); white-space: pre-wrap; overflow-wrap: anywhere; }
+.lightbox--journal .lightbox-guest { margin: 0; font-size: .9375rem; line-height: 1.5; overflow-wrap: anywhere; }
+.lightbox--journal .lightbox-guest > span { color: var(--muted); }
+.lightbox--journal .lightbox-guest > strong { font-weight: 600; }
+.lightbox--journal .lightbox-note-reference { display: block; color: var(--gold-text); font: 500 var(--text-label)/1.5 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; }
+.lightbox--journal .lightbox-navigation { display: grid; grid-template-columns: 48px minmax(100px, 200px) 48px; justify-content: center; align-items: center; gap: 16px; min-height: 76px; padding: 10px 20px max(14px, env(safe-area-inset-bottom)); }
 .lightbox--journal .lightbox-navigation.is-single { grid-template-columns: 1fr; }
-.lightbox--journal .lightbox-count { margin: 0; color: #d9c8aa; font: .58rem/1.7 var(--mono); letter-spacing: .045em; text-align: center; }
-.lightbox--journal .lightbox-keyboard-hint { position: absolute; bottom: max(31px,env(safe-area-inset-bottom)); left: 32px; margin: 0; color: #a7afb9; font-size: .59rem; line-height: 1.6; }
-.lightbox--journal .lightbox-toast { position: fixed; z-index: 6; right: max(24px,env(safe-area-inset-right)); bottom: calc(94px + env(safe-area-inset-bottom)); width: min(360px,calc(100vw - 48px)); margin: 0; padding: 16px 20px; border: 1px solid #c4a367; border-radius: 2px; color: #081b31; background: #f7f2e8; box-shadow: 0 10px 40px #0004; font-size: .76rem; line-height: 1.6; }
-.lightbox--journal .lightbox-toast.is-error { border-left: 3px solid #983f38; color: #7c302c; }
-@media (hover:hover) {
-  .lightbox--journal .lightbox-actions button:not(:disabled):hover,.lightbox--journal .lightbox-arrow:hover { border-color: #c4a367; color: #f7f2e8; background: #c4a3671f; }
-  .lightbox--journal .lightbox-actions .lightbox-close:hover { color: #081b31; background: #dcc59a; }
-  .lightbox--journal .lightbox-media-status button:hover { background: #f7f2e8; }
+.lightbox--journal .lightbox-count { margin: 0; color: #e3d6bd; font: 500 .8125rem/1.6 var(--font-mono); letter-spacing: .06em; text-align: center; font-variant-numeric: tabular-nums; }
+.lightbox--journal .lightbox-keyboard-hint { display: none; }
+.lightbox--journal .lightbox-toast { position: fixed; z-index: 6; right: max(16px, env(safe-area-inset-right)); bottom: calc(88px + env(safe-area-inset-bottom)); left: max(16px, env(safe-area-inset-left)); margin: 0; padding: 14px 18px; border-radius: 12px; color: var(--ink); background: var(--paper); box-shadow: 0 16px 40px #0006; font-size: .9375rem; line-height: 1.5; }
+.lightbox--journal .lightbox-toast.is-error { box-shadow: inset 4px 0 0 var(--danger), 0 16px 40px #0006; color: #7c302c; }
+@keyframes lightbox-in { from { opacity: 0; } to { opacity: 1; } }
+@media (hover: hover) {
+  .lightbox--journal .lightbox-actions button:not(:disabled):hover, .lightbox--journal .lightbox-arrow:hover { border-color: var(--gold); color: var(--paper); background: #ead3a21f; }
+  .lightbox--journal .lightbox-actions .lightbox-close:hover { color: var(--navy-deep); background: var(--gold-soft); }
+  .lightbox--journal .lightbox-media-status button:hover { background: var(--paper); }
 }
-@media (max-width:1050px) { .lightbox--journal .lightbox-keyboard-hint { display: none; } }
-@media (max-width:760px) {
-  .lightbox--journal .lightbox-bar { min-height: 76px; gap: 12px; padding: max(12px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 12px max(16px,env(safe-area-inset-left)); }
-  .lightbox--journal .lightbox-flight { font-size: 1.35rem; }
-  .lightbox--journal .lightbox-flight > span { font-size: .47rem; letter-spacing: .09em; }
-  .lightbox--journal .lightbox-actions { gap: 6px; }
-  .lightbox--journal .lightbox-actions button { width: 44px; height: 44px; }
-  .lightbox--journal .lightbox-actions .lightbox-close { margin-left: 0; }
-  .lightbox--journal .lightbox-content { display: block; padding: 20px max(18px,env(safe-area-inset-right)) 18px max(18px,env(safe-area-inset-left)); }
-  .lightbox--journal .lightbox-stage { height: auto; min-height: 160px; grid-template-rows: auto; }
-  .lightbox--journal .lightbox-content .lightbox-media { width: auto; height: auto; max-height: max(180px,calc(100svh - 245px)); }
-  .lightbox--journal .lightbox-content .lightbox-notes { width: 100%; margin-top: 18px; padding: 18px 20px; gap: 12px; }
-  .lightbox--journal .lightbox-notes blockquote { font-size: 1.3rem; line-height: 1.4; }
-  .lightbox--journal .lightbox-navigation { min-height: 70px; padding: 9px 18px max(10px,env(safe-area-inset-bottom)); }
-  .lightbox--journal .lightbox-arrow { width: 44px; height: 44px; }
-  .lightbox--journal .lightbox-media-status { min-height: 110px; padding: 18px; font-size: .7rem; }
-  .lightbox--journal .lightbox-toast { right: 18px; bottom: calc(84px + env(safe-area-inset-bottom)); width: calc(100vw - 36px); }
+@media (min-width: 761px) {
+  .lightbox--journal .lightbox-bar { min-height: 84px; padding-inline: max(32px, env(safe-area-inset-left)) max(28px, env(safe-area-inset-right)); }
+  .lightbox--journal .lightbox-flight { font-size: 1.7rem; }
+  .lightbox--journal .lightbox-content { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); align-items: center; gap: clamp(28px, 4vw, 64px); width: min(100%, 1600px); justify-self: center; padding: 12px max(40px, env(safe-area-inset-right)) 24px max(40px, env(safe-area-inset-left)); }
+  .lightbox--journal .lightbox-stage { height: max(200px, calc(100svh - 200px)); grid-template-rows: minmax(0, 1fr); }
+  .lightbox--journal .lightbox-media { max-height: 100%; }
+  .lightbox--journal .lightbox-content .lightbox-notes { width: 100%; margin: 0; padding: 28px; gap: 14px; }
+  .lightbox--journal .lightbox-notes blockquote { font-size: clamp(1.45rem, 2vw, 1.9rem); }
 }
-@media (max-width:380px) {
+@media (min-width: 1051px) {
+  .lightbox--journal .lightbox-keyboard-hint { position: absolute; display: block; bottom: max(28px, env(safe-area-inset-bottom)); left: 40px; margin: 0; color: #b6c2c8; font-size: .8125rem; line-height: 1.6; }
+}
+@media (max-width: 380px) {
   .lightbox--journal .lightbox-bar { padding-inline: 12px; gap: 6px; }
   .lightbox--journal .lightbox-flight { font-size: 1.15rem; }
-  .lightbox--journal .lightbox-actions { gap: 3px; }
+  .lightbox--journal .lightbox-actions { gap: 4px; }
+  .lightbox--journal .lightbox-actions button { width: 44px; height: 44px; }
 }
-@media (max-height:520px) and (orientation:landscape) {
-  .lightbox--journal .lightbox-bar { min-height: 58px; padding-block: max(7px,env(safe-area-inset-top)) 7px; }
-  .lightbox--journal .lightbox-flight { font-size: 1.2rem; gap: 4px; }
-  .lightbox--journal .lightbox-flight > span { font-size: .45rem; }
-  .lightbox--journal .lightbox-content { display: grid; grid-template-columns: minmax(0,1fr) minmax(200px,28%); grid-template-rows: minmax(min-content,1fr); padding-block: 15px; gap: 22px; }
-  .lightbox--journal .lightbox-stage { height: max(160px,calc(100svh - 160px)); min-height: 0; grid-template-rows: minmax(0,1fr); }
-  .lightbox--journal .lightbox-content .lightbox-media { max-height: 100%; }
-  .lightbox--journal .lightbox-content .lightbox-notes { margin-top: 0; padding: 16px 20px; }
-  .lightbox--journal .lightbox-navigation { min-height: 62px; padding-block: 7px max(7px,env(safe-area-inset-bottom)); }
+@media (max-height: 520px) and (orientation: landscape) {
+  .lightbox--journal .lightbox-bar { min-height: 58px; padding-block: max(7px, env(safe-area-inset-top)) 7px; }
+  .lightbox--journal .lightbox-content { display: grid; grid-template-columns: minmax(0, 1fr) minmax(200px, 30%); align-items: center; padding-block: 8px; gap: 20px; }
+  .lightbox--journal .lightbox-stage { height: max(160px, calc(100svh - 150px)); grid-template-rows: minmax(0, 1fr); }
+  .lightbox--journal .lightbox-media { max-height: 100%; }
+  .lightbox--journal .lightbox-content .lightbox-notes { margin-top: 0; padding: 16px 18px; }
+  .lightbox--journal .lightbox-navigation { min-height: 60px; padding-block: 6px max(6px, env(safe-area-inset-bottom)); }
   .lightbox--journal .lightbox-keyboard-hint { display: none; }
 }
-@media (prefers-reduced-motion:reduce) {
-  .lightbox--journal button,.lightbox--journal .lightbox-media { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .lightbox.lightbox--journal { animation: none; }
+  .lightbox--journal button, .lightbox--journal .lightbox-media { transition: none; }
   .lightbox--journal .spin { animation: none; }
 }

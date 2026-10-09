@@ -33,6 +33,11 @@ function historyState(lightbox: boolean) {
   }
 }
 
+/** Phones browse the compact grid; desktops open on the editorial journal spread. */
+function defaultView(): 'journal' | 'grid' {
+  return window.matchMedia?.('(min-width: 960px)').matches ? 'journal' : 'grid'
+}
+
 function matchesFilters(memory: GalleryMedia, filters: GalleryFilterState) {
   return (filters.event === 'all' || memory.event.slug === filters.event)
     && (filters.type === 'all' || memory.mediaType === filters.type)
@@ -57,7 +62,7 @@ function ConfiguredGalleryGrid({ config, onAddMemory }: { config: PublicGalleryC
   const { locale } = useLocale()
   const t = copy[locale].gallery
   const [filters, setFilters] = useState<GalleryFilterState>({ event: 'all', type: 'all' })
-  const [view, setView] = useState<'journal' | 'grid'>('journal')
+  const [view, setView] = useState<'journal' | 'grid'>(defaultView)
   const [items, setItems] = useState<GalleryMedia[]>([])
   const [cursor, setCursor] = useState<string | null>(null)
   const [resetLoadKind, setResetLoadKind] = useState<ResetLoadKind>('initial')
@@ -247,13 +252,13 @@ function ConfiguredGalleryGrid({ config, onAddMemory }: { config: PublicGalleryC
 
   return (
     <div className="gallery-surface">
-      {!downloadsAvailable && releaseDate ? (
-        <p className="download-release-note"><Clock3 aria-hidden="true" size={15} />{t.downloadsOpen(releaseDate)}</p>
-      ) : null}
       <GalleryFilters mode={config.mode} value={filters} onChange={changeFilters}>
+        {!downloadsAvailable && releaseDate ? (
+          <p className="download-release-note"><Clock3 aria-hidden="true" size={16} />{t.downloadsOpen(releaseDate)}</p>
+        ) : <span />}
         <div className="gallery-view-switch" role="group" aria-label={locale === 'en' ? 'Gallery layout' : 'Susun atur galeri'}>
-          <button type="button" aria-label={locale === 'en' ? 'Journal view' : 'Paparan jurnal'} aria-pressed={view === 'journal'} onClick={() => setView('journal')}><BookOpen size={16} aria-hidden="true" /><span>{locale === 'en' ? 'Journal' : 'Jurnal'}</span></button>
-          <button type="button" aria-label={locale === 'en' ? 'Grid view' : 'Paparan grid'} aria-pressed={view === 'grid'} onClick={() => setView('grid')}><LayoutGrid size={16} aria-hidden="true" /><span>Grid</span></button>
+          <button type="button" aria-label={locale === 'en' ? 'Grid view' : 'Paparan grid'} aria-pressed={view === 'grid'} onClick={() => setView('grid')}><LayoutGrid size={17} aria-hidden="true" /><span>Grid</span></button>
+          <button type="button" aria-label={locale === 'en' ? 'Journal view' : 'Paparan jurnal'} aria-pressed={view === 'journal'} onClick={() => setView('journal')}><BookOpen size={17} aria-hidden="true" /><span>{locale === 'en' ? 'Journal' : 'Jurnal'}</span></button>
         </div>
       </GalleryFilters>
       <p className="visually-hidden" role="status" aria-live="polite" aria-atomic="true">

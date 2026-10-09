@@ -127,7 +127,10 @@ describe('two-stage memory submission', () => {
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText(t.selectMultiple), { target: { files: [photo(), video()] } })
     expect(screen.getByText('memory.jpg')).toBeInTheDocument()
-    expect(screen.getByText('memory.mp4')).toBeInTheDocument()
+    // Guests share photographs only: a video is named in a friendly error and never queued.
+    expect(screen.queryByText('memory.mp4')).not.toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toHaveTextContent(t.videoNotAccepted)
+    expect(screen.getByLabelText(t.selectMultiple)).toHaveAttribute('accept', 'image/*')
     await details()
     expect(screen.getByRole('button', { name: t.startUpload })).toBeDisabled()
     fireEvent.change(screen.getByPlaceholderText(t.namePlaceholder), { target: { value: '  Mariam  ' } })
@@ -140,8 +143,8 @@ describe('two-stage memory submission', () => {
     expect(`${t.successBody} ${t.safe}`).toMatch(/review|approv/i)
     expect(prepareUploads).toHaveBeenCalledTimes(1)
     expect(vi.mocked(prepareUploads).mock.calls[0][0]).toMatchObject({ eventSlug: 'reception', guestName: 'Mariam', guestMessage: 'A wonderful day.', turnstileToken: 'verified-token' })
-    expect(vi.mocked(prepareUploads).mock.calls[0][0].files.map((file) => file.filename)).toEqual(['memory.jpg', 'memory.mp4'])
-    expect(uploadQueueItem).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(prepareUploads).mock.calls[0][0].files.map((file) => file.filename)).toEqual(['memory.jpg'])
+    expect(uploadQueueItem).toHaveBeenCalledTimes(1)
     expect(widgets[0].action).toBe('upload_prepare')
   })
 
@@ -167,12 +170,12 @@ describe('two-stage memory submission', () => {
   it('waits for the whole batch before exposing retry, and blocks closing during outstanding work', async () => {
     const transfer = deferred<CompleteUploadResponse>()
     vi.mocked(uploadQueueItem).mockImplementation(async (item, onProgress, options) => {
-      if (item.file.name === 'long-video.mp4') return transfer.promise
+      if (item.file.name === 'long-photo.jpg') return transfer.promise
       if (!options?.refreshBeforeUpload) throw new UploadTransferError('NETWORK_INTERRUPTED', 'Connection dropped')
       onProgress(100)
       return received()
     })
-    const view = mount([photo('retry.jpg'), video('long-video.mp4')])
+    const view = mount([photo('retry.jpg'), photo('long-photo.jpg')])
     await details()
     await send()
     await waitFor(() => expect(uploadQueueItem).toHaveBeenCalledTimes(2))
@@ -188,7 +191,7 @@ describe('two-stage memory submission', () => {
     await act(async () => { transfer.resolve(received()); await transfer.promise })
     fireEvent.click(await screen.findByRole('button', { name: t.retry }))
     expect(await screen.findByRole('heading', { name: t.success })).toBeInTheDocument()
-    expect(vi.mocked(uploadQueueItem).mock.calls.filter(([item]) => item.file.name === 'long-video.mp4')).toHaveLength(1)
+    expect(vi.mocked(uploadQueueItem).mock.calls.filter(([item]) => item.file.name === 'long-photo.jpg')).toHaveLength(1)
   })
 
   it.each(['one', 'all'] as const)('prepares new selections after retrying %s from a reopened partial batch across a date change', async (retryMode) => {

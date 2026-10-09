@@ -1,10 +1,8 @@
-import { MAX_FILES_PER_BATCH, MAX_IMAGE_SIZE, MAX_VIDEO_SIZE } from '../config'
+import { MAX_FILES_PER_BATCH, MAX_IMAGE_SIZE } from '../config'
 import type { MediaType, UploadVariantIntent } from '../../shared/contracts'
 
 const IMAGE_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'])
-const VIDEO_MIMES = new Set(['video/mp4', 'video/quicktime', 'video/webm'])
 const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'])
-const VIDEO_EXTENSIONS = new Set(['mp4', 'mov', 'webm'])
 const MIME_BY_EXTENSION: Record<string, string> = {
   jpg: 'image/jpeg',
   jpeg: 'image/jpeg',
@@ -19,7 +17,7 @@ const MIME_BY_EXTENSION: Record<string, string> = {
 
 export type FileValidation = { valid: true; mediaType: MediaType } | {
   valid: false
-  reason: 'unsupported' | 'image-too-large' | 'video-too-large'
+  reason: 'unsupported' | 'image-too-large' | 'video-not-accepted'
   message: string
 }
 
@@ -34,11 +32,11 @@ export function validateFile(file: File): FileValidation {
   const extension = fileExtension(file)
   const mimeType = getUploadMimeType(file)
   const isImage = IMAGE_MIMES.has(mimeType) && IMAGE_EXTENSIONS.has(extension)
-  const isVideo = VIDEO_MIMES.has(mimeType) && VIDEO_EXTENSIONS.has(extension)
-  if (!isImage && !isVideo) return { valid: false, reason: 'unsupported', message: `${file.name}: This file format isn't supported yet.` }
-  if (isImage && file.size > MAX_IMAGE_SIZE) return { valid: false, reason: 'image-too-large', message: `${file.name}: This photo is larger than the 25 MB upload limit.` }
-  if (isVideo && file.size > MAX_VIDEO_SIZE) return { valid: false, reason: 'video-too-large', message: `${file.name}: This video is larger than the 250 MB upload limit.` }
-  return { valid: true, mediaType: isImage ? 'photo' : 'video' }
+  // Guests share photographs only. Video is named separately so the message can say so kindly.
+  if (mimeType.startsWith('video/')) return { valid: false, reason: 'video-not-accepted', message: `${file.name}: We're collecting photos only. Please choose a photo.` }
+  if (!isImage) return { valid: false, reason: 'unsupported', message: `${file.name}: This file format isn't supported yet.` }
+  if (file.size > MAX_IMAGE_SIZE) return { valid: false, reason: 'image-too-large', message: `${file.name}: This photo is larger than the 25 MB upload limit.` }
+  return { valid: true, mediaType: 'photo' }
 }
 
 export function validateBatch(files: File[]) {

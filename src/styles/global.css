@@ -1,19 +1,33 @@
 * { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
-body { margin: 0; min-width: 320px; min-height: 100vh; overflow-x: hidden; background: var(--ivory); }
+html { scroll-behavior: smooth; scrollbar-color: var(--line-strong) var(--ivory); -webkit-text-size-adjust: 100%; }
+body { margin: 0; min-width: 320px; min-height: 100vh; overflow-x: hidden; background: var(--ivory); font-size: var(--text-body); line-height: 1.6; caret-color: var(--gold-deep); accent-color: var(--navy); }
 body, button, input, textarea, select { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
 img { display: block; max-width: 100%; }
-a { color: inherit; }
-:focus-visible { outline: 3px solid var(--metal); outline-offset: 3px; }
-::selection { color: #fff; background: var(--accent-deep); }
+a { color: inherit; text-underline-offset: .28em; text-decoration-thickness: 1px; }
+h1, h2, h3 { text-wrap: balance; }
+p { text-wrap: pretty; }
+:focus-visible { outline: 2px solid var(--gold-deep); outline-offset: 3px; }
+::selection { color: var(--paper); background: var(--navy); }
 .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0 0 0 0) !important; white-space: nowrap !important; border: 0 !important; }
-.eyebrow { margin: 0; color: var(--muted); font-family: var(--mono); font-size: .61rem; font-weight: 400; letter-spacing: .13em; text-transform: uppercase; }
-.button { display: inline-flex; min-height: 50px; align-items: center; justify-content: center; gap: 9px; padding: 0 22px; border: 1px solid transparent; border-radius: 3px; font-size: .76rem; font-weight: 600; letter-spacing: .015em; transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease; }
-.button:not(:disabled):hover { transform: translateY(-2px); }
-.button-primary { color: var(--paper); background: var(--ink); }
-.route-loading { display: grid; min-height: 100svh; place-content: center; justify-items: center; gap: 16px; color: var(--muted); background: var(--ivory); }
-.route-loading p { margin: 0; font-family: var(--serif); }
+.eyebrow { margin: 0; color: var(--gold-text); font: 500 var(--text-label)/1.4 var(--font-mono); letter-spacing: .12em; text-transform: uppercase; }
+
+/* Buttons: one solid primary, one quiet secondary. */
+.button { display: inline-flex; min-height: 50px; align-items: center; justify-content: center; gap: 10px; padding: 0 24px; border: 1px solid transparent; border-radius: var(--radius-control); font-size: .9375rem; font-weight: 600; letter-spacing: .005em; line-height: 1.2; text-decoration: none; transition: transform 200ms var(--ease-out), box-shadow 200ms var(--ease-out), background-color 200ms, border-color 200ms; }
+.button:not(:disabled):hover { transform: translateY(-1px); }
+.button:not(:disabled):active { transform: translateY(0); }
+.button-primary { color: var(--paper); background: var(--navy); box-shadow: 0 1px 0 #ffffff1f inset, 0 10px 24px -12px #033a4e99; }
+.button-primary:not(:disabled):hover { background: var(--navy-soft); }
+.button-primary > svg { color: var(--gold-soft); }
+.button-secondary { color: var(--ink); border-color: var(--line-strong); background: var(--paper); }
+.button-secondary:not(:disabled):hover { border-color: var(--navy); }
+.button:disabled { opacity: .55; box-shadow: none; }
+
+.route-loading { display: grid; min-height: 100svh; place-content: center; justify-items: center; gap: 18px; color: var(--muted); background: var(--ivory) var(--paper-texture); background-blend-mode: multiply; }
+.route-loading .monogram { width: 96px; animation: route-breathe 1.8s var(--ease-out) infinite alternate; }
+.route-loading p { margin: 0; font: italic 1.25rem var(--font-display); }
+@keyframes route-breathe { from { opacity: .55; } to { opacity: 1; } }
+
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }

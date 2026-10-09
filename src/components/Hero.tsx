@@ -1,4 +1,5 @@
-﻿import { ArrowDown, Camera, ImagePlus, Plane } from 'lucide-react'
+import { Camera, ImagePlus, Plane } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { useLocale } from '../context/useLocale'
 import { useGalleryVisibility } from '../context/useGalleryVisibility'
 import { galleryDateLabel } from '../utils/date'
@@ -8,10 +9,11 @@ import { PaperPlane } from './PaperPlane'
 type HeroProps = {
   onAddMemory: () => void
   onTakePhoto: () => void
-  onChooseMedia: () => void
+  /** Kept for callers; the uploader itself offers the photo library. */
+  onChooseMedia?: () => void
 }
 
-export function Hero({ onAddMemory, onTakePhoto, onChooseMedia }: HeroProps) {
+export function Hero({ onAddMemory, onTakePhoto }: HeroProps) {
   const { locale } = useLocale()
   const { config } = useGalleryVisibility()
   const date = galleryDateLabel(config?.mode ?? null, locale)
@@ -29,17 +31,17 @@ export function Hero({ onAddMemory, onTakePhoto, onChooseMedia }: HeroProps) {
         <h1 id="welcome-title">{english ? <>Our journey,<br /><em>through your eyes.</em></> : <>Perjalanan kami,<br /><em>melalui mata anda.</em></>}</h1>
         <p className="hero-intro">{english ? 'The stolen glances. The happy tears. The moments only you could capture.' : 'Pandangan penuh kasih. Air mata gembira. Detik indah dari sudut pandangan anda.'}</p>
         <div className="hero-actions">
-          <button type="button" className="button button-primary" onClick={onAddMemory}><ImagePlus size={17} aria-hidden="true" />{english ? 'Share a memory' : 'Kongsi kenangan'}</button>
-          <a className="hero-gallery-link" href="#gallery">{english ? 'Explore the gallery' : 'Terokai galeri'}<ArrowDown size={15} aria-hidden="true" /></a>
-        </div>
-        <div className="hero-quick-actions" role="group" aria-label={t.quickActions}>
-          <button type="button" onClick={onTakePhoto}><Camera size={14} aria-hidden="true" />{t.takePhoto}</button><span aria-hidden="true">/</span><button type="button" onClick={onChooseMedia}>{english ? 'Choose photos & videos' : 'Pilih foto & video'}</button>
+          <button type="button" className="button button-primary" onClick={onAddMemory}><ImagePlus size={18} aria-hidden="true" />{english ? 'Share your photos' : 'Kongsi foto anda'}</button>
+          <div className="hero-secondary" role="group" aria-label={t.quickActions}>
+            <button type="button" className="button button-secondary" onClick={onTakePhoto}><Camera size={17} aria-hidden="true" />{english ? 'Take a photo' : 'Ambil foto'}</button>
+            <Link className="button button-secondary hero-booth" to="/photobooth"><span className="hero-booth-strip" aria-hidden="true"><i /><i /><i /></span>{english ? 'Photo booth' : 'Ruang foto'}</Link>
+          </div>
         </div>
       </div>
       <div className="hero-itinerary">
-        <div><span>{english ? 'The newlyweds' : 'Pengantin'}</span><strong>Aleem <i>&</i> Nurulain</strong></div>
-        <div className="itinerary-route"><span>{english ? 'One beautiful beginning.' : 'Satu permulaan indah.'}</span><strong>{date}</strong></div>
-        <div className="itinerary-destination"><span>{t.destination}</span><strong><Plane size={15} aria-hidden="true" />{t.destinationValue}</strong></div>
+        <div><span>{english ? 'The newlyweds' : 'Pengantin'}</span><strong>Aleem <i>&amp;</i> Nurulain</strong></div>
+        <div className="itinerary-route"><span>{english ? 'One beautiful beginning' : 'Satu permulaan indah'}</span><strong>{date}</strong></div>
+        <div className="itinerary-destination"><span>{t.destination}</span><strong><Plane size={16} aria-hidden="true" />{t.destinationValue}</strong></div>
       </div>
     </section>
   )
