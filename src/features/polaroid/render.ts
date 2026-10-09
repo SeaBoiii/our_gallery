@@ -30,9 +30,10 @@ export function getBoothLayout(layout: BoothLayout): BoothLayoutGeometry {
   }
 }
 
-const INK = '#081b31'
-const GOLD = '#b79b65'
-const PAPER = '#f7f2e8'
+// Print palette sampled from the A&N monogram (see DESIGN_LANGUAGE.md).
+const INK = '#033a4e'
+const GOLD = '#c9a465'
+const PAPER = '#f8f3ea'
 const MONO_FONT = 'Consolas, "Liberation Mono", monospace'
 const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'])
 const extensionTypes: Record<string, string> = {
@@ -326,9 +327,9 @@ function drawFrame(context: CanvasRenderingContext2D, frame: BoothSettings['fram
     drawCover(context, clouds, 0, 0, width, height)
     // Keep the caption legible without covering the decorative outer margins.
     const wash = context.createLinearGradient(0, footerTop, 0, height)
-    wash.addColorStop(0, '#f7f2e820')
-    wash.addColorStop(0.45, '#f7f2e8b8')
-    wash.addColorStop(1, '#f7f2e870')
+    wash.addColorStop(0, '#f8f3ea20')
+    wash.addColorStop(0.45, '#f8f3eab8')
+    wash.addColorStop(1, '#f8f3ea70')
     context.fillStyle = wash
     context.fillRect(60 * unit, footerTop, width - 120 * unit, height - footerTop)
   }
@@ -348,7 +349,7 @@ function drawFrame(context: CanvasRenderingContext2D, frame: BoothSettings['fram
     }
     context.restore()
   }
-  context.strokeStyle = '#b79b6570'
+  context.strokeStyle = '#c9a46570'
   context.lineWidth = 1
   const inset = 48 * unit + 0.5
   context.strokeRect(inset, inset, width - inset * 2, height - inset * 2)
@@ -382,7 +383,7 @@ function drawPhoto(context: CanvasRenderingContext2D, entry: BoothPhoto | null, 
       layer.height = 0
     }
   }
-  context.strokeStyle = '#081b3118'
+  context.strokeStyle = '#033a4e18'
   context.lineWidth = 1
   context.strokeRect(x + 0.5, y + 0.5, width - 1, height - 1)
 }
@@ -393,15 +394,6 @@ function drawFooter(context: CanvasRenderingContext2D, settings: BoothSettings, 
   const top = footerStart(layout)
   const footerHeight = layout.height - 64 * unit - top
   const hasCaption = Boolean(settings.caption.trim())
-  // A quiet, offset monogram gives the footer the feel of a printed wedding ticket.
-  if (monogram) {
-    const height = footerHeight * 0.6
-    const width = height * monogram.naturalWidth / monogram.naturalHeight
-    context.save()
-    context.globalAlpha = 0.065
-    context.drawImage(monogram, layout.width * 0.72 - width / 2, top + footerHeight * 0.2, width, height)
-    context.restore()
-  }
   context.textAlign = 'center'
   context.textBaseline = 'alphabetic'
   context.fillStyle = INK
@@ -419,7 +411,7 @@ function drawFooter(context: CanvasRenderingContext2D, settings: BoothSettings, 
   lines.forEach((line, index) => context.fillText(line, center, top + (lines.length === 1 ? 72 : 52 + index * 48) * unit, captionWidth))
   if (!hasCaption) {
     context.font = `400 ${18 * unit}px ${MONO_FONT}`
-    context.fillStyle = '#6a695f'
+    context.fillStyle = '#56646c'
     context.fillText('OUR WEDDING', center, top + footerHeight * 0.13, layout.width * 0.6)
   }
   // The divider belongs above the names, even when the guest leaves no caption.
@@ -458,7 +450,7 @@ function drawFooter(context: CanvasRenderingContext2D, settings: BoothSettings, 
   context.fillText('Aleem', start + firstWidth / 2, nameY, firstWidth)
   context.fillText('Nurulain', start + firstWidth + gap * 2 + ampWidth + lastWidth / 2, nameY, lastWidth)
   context.font = `italic 400 ${nameSize * 0.72}px ${serif}`
-  context.fillStyle = '#a3824d'
+  context.fillStyle = '#a9834a'
   context.fillText('&', start + firstWidth + gap + ampWidth / 2, nameY, ampWidth)
   const labels = {
     solemnisation: '21 AUGUST 2027',
@@ -468,8 +460,35 @@ function drawFooter(context: CanvasRenderingContext2D, settings: BoothSettings, 
   context.fillStyle = INK
   if (settings.celebration) context.fillText(labels[settings.celebration], center, top + footerHeight * 0.84, layout.width * 0.8)
   context.font = `400 ${17 * unit}px ${MONO_FONT}`
-  context.fillStyle = '#6a695f'
+  context.fillStyle = '#56646c'
   context.fillText('SINGAPORE  /  FOREVER', center, top + footerHeight * 0.98, layout.width * 0.6)
+  if (monogram) drawMonogramStamp(context, monogram, layout, {
+    left: layout.width * 0.035,
+    // A whitewashed watermark may sit faintly behind the date lines, but it stays in the
+    // left half and below the names' baseline (the names have no descenders), so it never covers them.
+    right: center - layout.width * 0.03,
+    top: nameY + 8 * unit,
+    bottom: layout.height - 12 * unit,
+  })
+}
+
+/** A large, whitewashed A&N tilted into the bottom-left corner, like a faded stamp on a printed ticket. */
+function drawMonogramStamp(context: CanvasRenderingContext2D, monogram: HTMLImageElement, layout: BoothLayoutGeometry, box: { left: number; right: number; top: number; bottom: number }) {
+  const unit = Math.min(1, layout.width / POLAROID_WIDTH)
+  const ratio = monogram.naturalWidth / monogram.naturalHeight
+  const tilt = -8 * Math.PI / 180
+  // Rotation widens the footprint, so fit the rotated bounds inside the free box.
+  const spreadWidth = ratio * Math.abs(Math.cos(tilt)) + Math.abs(Math.sin(tilt))
+  const spreadHeight = ratio * Math.abs(Math.sin(tilt)) + Math.abs(Math.cos(tilt))
+  const height = Math.max(0, Math.min((box.right - box.left) / spreadWidth, (box.bottom - box.top) / spreadHeight, 240 * unit))
+  if (height < 24 * unit) return
+  const width = height * ratio
+  context.save()
+  context.globalAlpha = 0.16
+  context.translate(box.left + height * spreadWidth / 2, box.bottom - height * spreadHeight / 2)
+  context.rotate(tilt)
+  context.drawImage(monogram, -width / 2, -height / 2, width, height)
+  context.restore()
 }
 
 const renderVersions = new WeakMap<HTMLCanvasElement, number>()

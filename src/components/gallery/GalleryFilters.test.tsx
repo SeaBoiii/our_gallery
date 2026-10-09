@@ -4,13 +4,14 @@ import { GalleryFilters } from './GalleryFilters'
 import { LocaleProvider } from '../../context/LocaleContext'
 
 describe('gallery filters', () => {
-  it('emits independent day and media filters', () => {
+  it('emits day filters and offers no media-type filter for a photos-only gallery', () => {
     const change = vi.fn()
     render(<LocaleProvider><GalleryFilters value={{ event: 'all', type: 'all' }} onChange={change} /></LocaleProvider>)
     fireEvent.click(screen.getByRole('button', { name: '21 August' }))
     expect(change).toHaveBeenCalledWith({ event: 'solemnisation', type: 'all' })
-    fireEvent.click(screen.getByRole('button', { name: 'Videos' }))
-    expect(change).toHaveBeenCalledWith({ event: 'all', type: 'video' })
+    expect(screen.queryByRole('button', { name: 'Videos' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '21 August' })).toHaveTextContent('AN2108')
+    expect(screen.getByRole('button', { name: '22 August' })).toHaveTextContent('AN2208')
   })
 
   it('identifies the selected chapter without resetting the media filter', () => {
@@ -27,6 +28,6 @@ describe('gallery filters', () => {
     render(<LocaleProvider><GalleryFilters value={{ event: 'all', type: 'all' }} onChange={vi.fn()} /></LocaleProvider>)
     expect(screen.getByRole('button', { name: 'Semua detik' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: '21 Ogos' })).toBeInTheDocument()
-    expect(screen.getAllByText('Perkahwinan Kami')).toHaveLength(3)
+    expect(screen.getByRole('button', { name: 'Semua detik' })).toHaveTextContent('Kedua-dua hari')
   })
 })

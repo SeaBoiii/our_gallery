@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import { ArrowUpRight, ImageOff, Play } from 'lucide-react'
 import type { GalleryMedia } from '../../../shared/contracts'
 import { USE_MOCK_DATA } from '../../config'
@@ -16,6 +16,8 @@ export function MemoryCard({ memory, onOpen, number = 1, view = 'journal' }: { m
   const height = memory.height && memory.height > 0 ? memory.height : 0
   const ratio = width && height ? `${width} / ${height}` : '4 / 3'
   const portrait = width && height ? width / height < 0.9 : false
+  // Justified rows: each print's flex share follows its proportions, clamped so panoramas and tall crops stay sensible.
+  const flexRatio = width && height ? Math.min(2, Math.max(0.62, width / height)) : 4 / 3
   const eventName = memory.event.slug === 'solemnisation' ? t.solemnisation : t.reception
   const [failedUrls, setFailedUrls] = useState<string[]>([])
   const thumbnail = memory.thumbnailUrl && !failedUrls.includes(absoluteUrl(memory.thumbnailUrl)) ? memory.thumbnailUrl : ''
@@ -32,13 +34,13 @@ export function MemoryCard({ memory, onOpen, number = 1, view = 'journal' }: { m
   const date = memory.event.slug === 'solemnisation' ? t.dayOne : t.dayTwo
   const owner = memory.guestName || t.guestMemory
   return (
-    <button className={`memory-card${portrait ? ' memory-card--portrait' : ''}${memory.mediaType === 'video' ? ' memory-card--video' : ''}`} type="button" onClick={onOpen} aria-label={`${t.open} ${t[memory.mediaType]} ${t.from} ${eventName}: ${owner}`}>
+    <button className={`memory-card${portrait ? ' memory-card--portrait' : ''}${memory.mediaType === 'video' ? ' memory-card--video' : ''}`} style={{ '--ratio': flexRatio.toFixed(3) } as CSSProperties} type="button" onClick={onOpen} aria-label={`${t.open} ${t[memory.mediaType]} ${t.from} ${eventName}: ${owner}`}>
       <span className="memory-mount">
       <span className="memory-frame" style={{ aspectRatio: ratio }}>
         {imageSource ? <img
           src={imageSource}
           srcSet={responsiveSource}
-          sizes={responsiveSource ? view === 'grid' ? '(max-width: 639px) 44vw, (max-width: 959px) 29vw, 300px' : '(max-width: 639px) 60vw, (max-width: 959px) 60vw, 740px' : undefined}
+          sizes={responsiveSource ? view === 'grid' ? '(max-width: 639px) 60vw, (max-width: 1199px) 40vw, 480px' : '(max-width: 639px) 92vw, (max-width: 959px) 70vw, 740px' : undefined}
           width={width || undefined}
           height={height || undefined}
           alt={memory.guestMessage || `${t.guestMemory} ${t.from} ${eventName}`}

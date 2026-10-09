@@ -94,7 +94,7 @@ export function UploadExperience({ open, initialFiles, onClose, onViewGallery, l
         if (duplicate) { problems.push(`${file.name}: ${t.duplicateFile}`); continue }
         const validation = validateFile(file)
         if (!validation.valid) {
-          const message = validation.reason === 'image-too-large' ? t.photoTooLarge : validation.reason === 'video-too-large' ? t.videoTooLarge : t.unsupportedFile
+          const message = validation.reason === 'image-too-large' ? t.photoTooLarge : validation.reason === 'video-not-accepted' ? t.videoNotAccepted : t.unsupportedFile
           problems.push(`${file.name}: ${message}`)
           continue
         }
@@ -113,7 +113,7 @@ export function UploadExperience({ open, initialFiles, onClose, onViewGallery, l
       if (problems.length) window.setTimeout(() => setErrors(problems), 0)
       return [...current, ...accepted]
     })
-  }, [t.batchLimit, t.duplicateFile, t.photoTooLarge, t.unsupportedFile, t.videoTooLarge])
+  }, [t.batchLimit, t.duplicateFile, t.photoTooLarge, t.unsupportedFile, t.videoNotAccepted])
 
   useEffect(() => {
     if (!open || !initialFiles.length || initialFilesConsumed.current === initialFiles) return
@@ -391,7 +391,7 @@ export function UploadExperience({ open, initialFiles, onClose, onViewGallery, l
                 <button type="button" onClick={() => cameraRef.current?.click()}><Camera aria-hidden="true" /><span><strong>{copy[locale].takePhoto}</strong><small>{t.useCamera}</small></span></button>
                 <button type="button" onClick={() => chooserRef.current?.click()}><ImagePlus aria-hidden="true" /><span><strong>{copy[locale].chooseMedia}</strong><small>{t.selectMultiple}</small></span></button>
               </div>
-              <p className="file-limits">{locale === 'en' ? 'Photos up to 25 MB · Videos up to 250 MB' : 'Foto sehingga 25 MB · Video sehingga 250 MB'}</p>
+              <p className="file-limits">{locale === 'en' ? 'JPG, PNG, WebP or HEIC · up to 25 MB each · photos only' : 'JPG, PNG, WebP atau HEIC · sehingga 25 MB setiap satu · foto sahaja'}</p>
               {queue.length ? <div className="queue-summary"><span><strong>{queue.length}</strong> {t.selected}</span><span>{formatBytes(totalBytes)}</span></div> : null}
               <UploadQueue items={queue} canRemove onRemove={remove} />
             </section>
@@ -422,7 +422,7 @@ export function UploadExperience({ open, initialFiles, onClose, onViewGallery, l
         </div>
         {step < 2 ? <footer className="upload-footer"><button type="button" className="back-button" onClick={() => step === 0 ? handleClose() : setStep(0)}><ChevronLeft aria-hidden="true" />{t.back}</button><button type="button" className="button button-primary" disabled={!canContinue} onClick={() => step === 1 ? void startUpload() : setStep(1)}>{step === 1 ? t.startUpload : t.continue}</button></footer> : null}
         <input ref={cameraRef} className="visually-hidden" type="file" aria-label={t.useCamera} accept="image/*" capture="environment" tabIndex={-1} aria-hidden="true" onChange={(event) => { addFiles(Array.from(event.target.files || [])); event.currentTarget.value = '' }} />
-        <input ref={chooserRef} className="visually-hidden" type="file" aria-label={t.selectMultiple} accept="image/*,video/*" multiple tabIndex={-1} aria-hidden="true" onChange={(event) => { addFiles(Array.from(event.target.files || [])); event.currentTarget.value = '' }} />
+        <input ref={chooserRef} className="visually-hidden" type="file" aria-label={t.selectMultiple} accept="image/*" multiple tabIndex={-1} aria-hidden="true" onChange={(event) => { addFiles(Array.from(event.target.files || [])); event.currentTarget.value = '' }} />
       </div>
     </div>
   )

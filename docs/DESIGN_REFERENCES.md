@@ -58,3 +58,26 @@ Validation: 424 tests across 46 files, lint and the frontend production build (i
 The home page and administration are gallery-only. Old `/guestbook` links redirect to `/gallery`; the public greeting API is retired. Historical data and migrations remain intact. Media uploads, approval, original files, day associations and the original download-release date remain in place.
 
 The journal grid preserves DOM/keyboard reading order. Photos keep their aspect ratios; videos retain a play indicator and open in the existing viewer. The in-app browser was unavailable during this implementation, so responsive CSS and automated interactions were checked, but screenshots and visual browser review could not be completed.
+
+## Golden Hour Arrivals (October 2026)
+
+The gallery now shares Our Flight's tokens instead of its own drifted palette. Navy `#033A4E` and champagne `#D9B472` were sampled from the A&N monogram with Pillow, and are the same values Our Flight uses. IBM Plex Mono and the cotton-paper tile are copied from `our_flight/src/assets` with their licences. The metaphor moves from a departure (the invitation) to an *arrivals hall*:
+- day tabs carry the flight codes AN2108 / AN2208;
+- the photo booth is a ticket with a perforated stub;
+- the projector wall shows one large photograph, with newly approved photos "landing" next.
+
+The full rationale, craft floor and projector rules are in [`DESIGN_LANGUAGE.md`](../DESIGN_LANGUAGE.md). Guest video is retired from the interface (photos only). The scattered six-layout live journal was replaced because it rendered the photograph at about 25% of a projector screen.
+
+Validation:
+- Lint, 409 tests across 45 files, and the production build pass.
+- Playwright screenshots were reviewed for `/`, the viewer, the upload sheet, `/photobooth` and `/qr` at 360, 390, 412, 768 and 1280, and for `/live` at 390, 1280×720, 1920×1080 and 3840×2160, with no horizontal overflow and no console errors.
+- The live-wall QR decodes to the gallery URL from the 720p and 1080p screenshots, and the printable card's QR decodes too.
+
+A real projector, venue Wi-Fi and physical phones (iOS Safari camera) still need a rehearsal.
+
+### Refinements after review
+
+- The original invitation-cover hero and photo booth banner are restored at the couple's request. They are recoloured to the monogram palette, with text at least 11 px (labels) and 16 px (body).
+- The gallery opens on the Journal spread on desktop and on the Grid on phones.
+- On every print layout and frame, the booth's A&N monogram is a large, whitewashed stamp tilted into the bottom-left corner. It stays below the names and may sit faintly behind the date lines. All nine layout and frame combinations were rendered in Chromium and inspected, with empty, short and long captions.
+- The live wall became a *journal pile*: taped Polaroids settle onto the previous prints, beside a postmarked journal note and a perforated boarding-pass QR. The QR decodes from 720p, 1080p and 4K screenshots.

@@ -1,19 +1,23 @@
 # Aleem & Nurulain — Our Wedding Collection
 
-A browser-first wedding photo and video collection for 21–22 August 2027, presented as a wedding and flight journal. Guests can scan one QR code, take or choose media, add an optional name and caption, upload without an account, and browse approved memories. The same site also provides a full-screen live wall, printable QR card, and a separate media moderation console.
+A browser-first wedding photo collection for 21–22 August 2027, presented as a wedding and flight journal. Guests can scan one QR code, take or choose photos, add an optional name and caption, upload without an account, and browse approved memories. The same site also provides a full-screen live wall, printable QR card, and a separate media moderation console.
 
 The frontend is static React + Vite on GitHub Pages. The API is a Cloudflare Worker backed by private R2 storage and D1 metadata.
 
 
-## Wedding journal revamp
+## Golden Hour Arrivals redesign
 
-The gallery uses the current Our Flight design language: navy, ivory and gold, the original A/N monogram, and locally hosted Instrument Serif (license in `public/fonts/`). `/` and `/gallery` show the photo and video journal. Media sharing has two input steps: choose files, then confirm the celebration and optional guest details.
+The gallery shares Our Flight's design system: the monogram's own navy `#033A4E` and champagne `#D9B472`, Instrument Serif, IBM Plex Mono for flight data, and the system sans for reading (fonts and OFL licences in `public/fonts/`). The direction, tokens, craft floor and projector rules are documented in [`DESIGN_LANGUAGE.md`](DESIGN_LANGUAGE.md). The site is designed mobile first; `/live` is designed for 1080p and 4K projectors.
+
+**Photos only.** Guests share photographs, not video. Every guest picker accepts `image/*`, and `validateFile()` rejects video with a friendly message, including drag-and-drop and Files-app picks. The Worker is deliberately unchanged, so it still accepts the video MIME types if someone calls the API directly; admin moderation is the safeguard. The gallery viewer still plays any legacy video an admin approves, but the live wall shows photographs only.
+
+`/` and `/gallery` show the photo journal. Media sharing has two input steps: choose files, then confirm the celebration and optional guest details.
 
 Albums retain their stable IDs: `solemnisation` is **21 August** and `reception` is **22 August**. Both use **Our Wedding / Perkahwinan Kami**. Existing uploads and captions keep their associations.
 
 ### Retired standalone greetings
 
-Standalone greetings are retired. The public site has no guestbook or written-wish submission flow, and the admin console has no Greetings tab or Guest greetings switch. Old `/guestbook` links redirect to `/gallery`. Optional captions remain part of photo and video uploads and use normal media moderation.
+Standalone greetings are retired. The public site has no guestbook or written-wish submission flow, and the admin console has no Greetings tab or Guest greetings switch. Old `/guestbook` links redirect to `/gallery`. Optional captions remain part of photo uploads and use normal media moderation.
 
 Both `GET /api/greetings` and `POST /api/greetings` (including their trailing-slash forms) return HTTP `410 Gone` with error code `GUESTBOOK_RETIRED`. Historical greeting rows and the additive `0003_greetings.sql` migration remain in place; retiring the feature does not delete stored data. That migration also corrects the day-one display label and disables media auto-approval at launch.
 
@@ -44,7 +48,7 @@ Uploads never send large media bytes through Worker memory. The Worker validates
 ## What is included
 
 - Mobile-first guest flow with camera capture and multi-file selection.
-- Up to 20 files per batch; 25 MB images and 250 MB videos by default.
+- Up to 20 photos per batch; 25 MB per image. (The Worker's 250 MB video limit remains server-side only; the guest interface accepts photos.)
 - JPEG, PNG, WebP, HEIC/HEIF, MP4, MOV, and WebM admission checks.
 - Original-preserving browser derivatives: ~1800 px WebP display and 480 px WebP thumbnail.
 - Per-file and overall upload progress, partial-failure recovery, and individual retry.
@@ -52,7 +56,7 @@ Uploads never send large media bytes through Worker memory. The Worker validates
 - SHA-256 duplicate fingerprints scoped to the same browser and event.
 - Approved-only paginated gallery, filters, lazy thumbnails, lightbox, keyboard/swipe navigation, sharing, and original-file downloads that unlock automatically after the wedding through five-minute signed URLs.
 - English and Bahasa Melayu guest interface with local preference storage.
-- `/live` polling wall with non-repeating rotation, preloading, muted video, filters, QR, and fullscreen mode.
+- `/live` projector wall ("journal pile"): each photograph arrives as a large taped Polaroid on top of the two before it, beside a paper journal note and a boarding-pass QR. Captions and names are legible across a hall, newly approved photos are shown next, controls auto-hide, and Screen Wake Lock, non-repeating rotation, preloading and fullscreen are supported.
 - `/qr` high-contrast printable boarding card.
 - `/admin` password login, HMAC-signed HttpOnly session, statistics, storage breakdown, moderation, shared date visibility, auto-approval, and live-wall controls.
 - Private R2, exact-origin CORS, Turnstile, hashed IP/session rate limits, post-upload verification, and scheduled stale-upload cleanup.
@@ -395,6 +399,6 @@ The test suite covers Singapore date selection, upload queue success/failure/ret
 - Browser HEIC conversion is lazy-loaded and best-effort. The original still uploads when a derivative cannot be decoded; admin sees the derivative state.
 - The live wall polls every 20 seconds instead of using a persistent real-time channel, which is intentionally simpler and resilient for a two-day event.
 - D1/R2 changes are a recoverable saga, not one cross-service transaction. Intermediate statuses and cron reconciliation are therefore essential.
-- Before the wedding, run a real-device rehearsal on iPhone Safari, Android Chrome, Samsung Internet, the venue Wi-Fi, and the actual projector. Test a maximum-size video and a connection drop during a mixed batch.
+- Before the wedding, run a real-device rehearsal on iPhone Safari, Android Chrome, Samsung Internet, the venue Wi-Fi, and the actual projector. Test a maximum-size HEIC photo, a connection drop during a large batch, and the live wall's QR from the back of the hall.
 
 Recommended later improvements are server-side image/video processing, an optional private access code if the couple wants post-event protection, offline background upload resumption where browser support is reliable, and automated pre-event load testing against a non-production bucket/database.

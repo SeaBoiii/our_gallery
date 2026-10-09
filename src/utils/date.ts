@@ -27,3 +27,13 @@ export function galleryDateLabel(mode: GalleryDayMode | null, locale: 'en' | 'ms
   const day = mode === 'both' ? '21 — 22' : mode === 'solemnisation' ? '21' : '22'
   return `${day} ${locale === 'ms' ? 'Ogos' : compact ? 'Aug' : 'August'} 2027`
 }
+
+/** Our Flight's codes for each wedding day, used as boarding-pass details. */
+export const flightCode = (slug: EventSlug) => slug === 'solemnisation' ? 'AN2108' : 'AN2208'
+
+/** Flight codes for the days the gallery has revealed; none before a day is confirmed. */
+export function flightCodes(mode: GalleryDayMode | null) {
+  if (mode === 'solemnisation' || mode === 'reception') return [flightCode(mode)]
+  if (mode === 'both') return [flightCode('solemnisation'), flightCode('reception')]
+  return []
+}

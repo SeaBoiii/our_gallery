@@ -86,7 +86,7 @@ describe('gallery experience', () => {
     renderGallery()
 
     expect(await screen.findByRole('button', { name: /open photo/i })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Videos' }))
+    fireEvent.click(screen.getByRole('button', { name: '22 August' }))
     expect(screen.queryByRole('button', { name: /open photo/i })).not.toBeInTheDocument()
     expect(document.querySelectorAll('.memory-skeleton')).toHaveLength(8)
 
@@ -115,7 +115,7 @@ describe('gallery experience', () => {
     renderGallery()
 
     fireEvent.click(await screen.findByRole('button', { name: /open photo/i }))
-    fireEvent.click(screen.getByRole('button', { name: 'Videos' }))
+    fireEvent.click(screen.getByRole('button', { name: '22 August' }))
     await act(async () => resolveRefresh?.(mockGallery[0]))
 
     expect(await screen.findByRole('heading', { name: /no memories match/i })).toBeInTheDocument()
@@ -166,6 +166,16 @@ describe('gallery experience', () => {
     expect(api.getGallery).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: 'page-two' }))
   })
 
+  it('opens on the journal spread on desktop screens', async () => {
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({ matches: query === '(min-width: 960px)', addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    api.getGallery.mockResolvedValue({ items: mockGallery.slice(0, 3), nextCursor: null } satisfies GalleryPage)
+    renderGallery()
+    await screen.findAllByRole('button', { name: /open photo/i })
+    expect(screen.getByRole('button', { name: 'Journal view' })).toHaveAttribute('aria-pressed', 'true')
+    expect(document.querySelector('.memory-grid--journal')).toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+
   it('switches between journal and grid without reloading or reordering memories', async () => {
     api.getGallery.mockResolvedValue({ items: mockGallery.slice(0, 3), nextCursor: null } satisfies GalleryPage)
     api.getGalleryMedia.mockResolvedValue(mockGallery[1])
@@ -173,9 +183,11 @@ describe('gallery experience', () => {
     await screen.findAllByRole('button', { name: /open photo/i })
     const labels = () => screen.getAllByRole('button', { name: /open photo/i }).map((button) => button.getAttribute('aria-label'))
     const initialOrder = labels()
-    expect(screen.getByRole('button', { name: 'Journal view' })).toHaveAttribute('aria-pressed', 'true')
-    fireEvent.click(screen.getByRole('button', { name: 'Grid view' }))
     expect(screen.getByRole('button', { name: 'Grid view' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.queryByRole('button', { name: 'Videos' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Journal view' }))
+    expect(screen.getByRole('button', { name: 'Journal view' })).toHaveAttribute('aria-pressed', 'true')
+    expect(document.querySelector('.memory-grid--journal')).toBeInTheDocument()
     expect(labels()).toEqual(initialOrder)
     expect(api.getGallery).toHaveBeenCalledTimes(1)
     fireEvent.click(screen.getAllByRole('button', { name: /open photo/i })[1])

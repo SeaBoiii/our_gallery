@@ -42,6 +42,8 @@ function makeContext() {
   }
 }
 type MockContext = ReturnType<typeof makeContext>
+// Photo layers rotate and translate; the printed output also rotates its monogram stamp but carries the text.
+const photoLayers = () => contexts.filter((context) => context.rotate.mock.calls.length && !context.textRuns.length)
 
 function bitmap(width = 2400, height = 1800) {
   return { width, height, close: vi.fn() }
@@ -287,7 +289,7 @@ describe('shared preview and PNG renderer', () => {
     await renderer.drawPolaroid(canvas, source, settings({ rotation: 90, zoom: 2, caption, finish: 'mono' }))
     expect(canvas.width).toBe(1200)
     expect(canvas.height).toBe(1500)
-    const photoContext = contexts.find((context) => context.rotate.mock.calls.length)!
+    const photoContext = photoLayers()[0]
     expect(photoContext.rotate).toHaveBeenCalledWith(Math.PI / 2)
     expect(photoContext.drawImage.mock.calls[0][0]).toBe(source.source)
     expect(photoContext.putImageData.mock.calls[0][0].data).toEqual(new Uint8ClampedArray([143, 143, 143, 255]))
@@ -322,7 +324,7 @@ describe('shared preview and PNG renderer', () => {
   it('renders a neutral empty photo slot without adding a sample photo', async () => {
     await renderer.drawPolaroid(document.createElement('canvas'), null, settings())
     expect(contexts[0].fillRect).toHaveBeenCalledWith(72, 72, 1056, 1056)
-    expect(contexts.some((context) => context.rotate.mock.calls.length)).toBe(false)
+    expect(photoLayers().length > 0).toBe(false)
     expect(imageSources).toEqual([new URL('/monogram.png', window.location.origin).href])
   })
 
@@ -486,7 +488,7 @@ describe('photobooth layouts and independent crops', () => {
     })
     const result = await renderer.exportPhotobooth(entries, boothSettings({ layout, finish: 'warm' }))
     expect(result.type).toBe('image/png')
-    const photoContexts = contexts.filter((context) => context.rotate.mock.calls.length)
+    const photoContexts = photoLayers()
     expect(photoContexts).toHaveLength(entries.length)
     photoContexts.forEach((context, index) => {
       expect(context.drawImage.mock.calls[0][0]).toBe(entries[index].photo.source)
@@ -524,7 +526,7 @@ describe('photobooth layouts and independent crops', () => {
           const detail = output.textRuns.find(run => run.text === 'SINGAPORE  /  FOREVER')!
           const kicker = output.textRuns.find(run => run.text === 'OUR WEDDING')
           expect(date.fontSize).toBe(layout === 'strip' ? 28 : 34)
-          expect(date.fillStyle).toBe('#081b31')
+          expect(date.fillStyle).toBe('#033a4e')
           expect(date.text).toBe(celebration === 'solemnisation' ? '21 AUGUST 2027' : '22 AUGUST 2027')
           expect(Math.max(...names.map(run => run.y + run.fontSize * 0.25)) + 4).toBeLessThan(date.y - date.fontSize)
           expect(date.y + date.fontSize * 0.25 + 4).toBeLessThan(detail.y - detail.fontSize)
@@ -538,7 +540,7 @@ describe('photobooth layouts and independent crops', () => {
           const divider = marks.find(run => run.points.every(point => point.y === run.points[0].y))!
           const plane = marks.find(run => run !== divider)!
           expect(divider.points.filter(point => point.kind === 'move')).toHaveLength(2)
-          expect(divider.color).toBe('#b79b65')
+          expect(divider.color).toBe('#c9a465')
           expect(plane.color).toBe(divider.color)
           expect(plane.points.length).toBeGreaterThanOrEqual(5)
           const planeTop = Math.min(...plane.points.map(point => point.y))
@@ -558,7 +560,7 @@ describe('photobooth layouts and independent crops', () => {
     const incomplete = [entries[0], null, entries[2]]
     const canvas = document.createElement('canvas')
     await renderer.drawPhotobooth(canvas, incomplete, boothSettings())
-    expect(contexts.filter((context) => context.rotate.mock.calls.length)).toHaveLength(2)
+    expect(photoLayers()).toHaveLength(2)
     expect(canvas.width).toBe(900)
     await expect(renderer.exportPhotobooth(incomplete, boothSettings())).rejects.toMatchObject({ code: 'incomplete' })
     await expect(renderer.exportPhotobooth([], boothSettings({ layout: 'single' }))).rejects.toMatchObject({ code: 'incomplete' })
@@ -572,10 +574,21 @@ describe('photobooth layouts and independent crops', () => {
       const output = contexts[contextIndex]
       expect(output.textRuns.map(run => run.text)).toEqual(['OUR WEDDING', 'Aleem', 'Nurulain', '&', '21 AUGUST 2027', 'SINGAPORE  /  FOREVER'])
       expect(output.textRuns.find(run => run.text === 'Aleem')?.fontSize).toBe(layout === 'strip' ? 82 : 96)
+      // The monogram is a large, whitewashed stamp tilted into the bottom-left corner, clear of the names.
       const monogram = output.drawImage.mock.calls.find(call => (call[0] as { src?: string }).src?.endsWith('/monogram.png'))!
       expect(monogram).toBeDefined()
-      expect(monogram[1] + monogram[3] / 2).toBeGreaterThan(renderer.getBoothLayout(layout).width / 2)
-      expect(output.globalAlpha).toBeLessThan(0.1)
+      expect(output.rotate).toHaveBeenCalled()
+      const [stampX, stampY] = output.translate.mock.calls.at(-1)! as [number, number]
+      const [stampWidth, stampHeight] = [monogram[3] as number, monogram[4] as number]
+      const tilt = Math.abs(output.rotate.mock.calls.at(-1)![0] as number)
+      const stampHalfWidth = (stampWidth * Math.cos(tilt) + stampHeight * Math.sin(tilt)) / 2
+      const stampHalfHeight = (stampWidth * Math.sin(tilt) + stampHeight * Math.cos(tilt)) / 2
+      const names = output.textRuns.filter(run => ['Aleem', '&', 'Nurulain'].includes(run.text))
+      const dated = output.textRuns.filter(run => ['21 AUGUST 2027', 'SINGAPORE  /  FOREVER'].includes(run.text))
+      expect(stampX + stampHalfWidth).toBeLessThan(renderer.getBoothLayout(layout).width / 2)
+      expect(stampY - stampHalfHeight).toBeGreaterThan(Math.max(...names.map(run => run.y)))
+      expect(dated).toHaveLength(2)
+      expect(output.globalAlpha).toBeLessThan(0.25)
     }
     const contextIndex = contexts.length
     await renderer.drawPhotobooth(document.createElement('canvas'), boothPhotos(), boothSettings({ layout, caption: 'Forever together' }))
@@ -593,10 +606,10 @@ describe('photobooth layouts and independent crops', () => {
 
       expect(first.font).toMatch(/^400 /)
       expect(last.font).toBe(first.font)
-      expect(first.fillStyle).toBe('#081b31')
+      expect(first.fillStyle).toBe('#033a4e')
       expect(last.fillStyle).toBe(first.fillStyle)
       expect(ampersand.font).toMatch(/^italic 400 /)
-      expect(ampersand.fillStyle).toBe('#a3824d')
+      expect(ampersand.fillStyle).toBe('#a9834a')
       expect(ampersand.fontSize).toBeCloseTo(first.fontSize * 0.72)
       expect(ampersand.y).toBe(first.y)
       expect(last.y).toBe(first.y)
@@ -636,7 +649,7 @@ describe('photobooth layouts and independent crops', () => {
     entries.reverse()
     pendingAssets[0]()
     await drawing
-    const drawn = contexts.filter((context) => context.rotate.mock.calls.length)
+    const drawn = photoLayers()
     expect(drawn[0].drawImage.mock.calls[0][0]).toBe(first.source)
     expect(drawn[0].rotate).toHaveBeenCalledWith(0)
   })
@@ -652,7 +665,7 @@ describe('photobooth layouts and independent crops', () => {
     await old
     expect(canvas.width).toBe(1200)
     expect(canvas.height).toBe(1500)
-    expect(contexts.filter((context) => context.rotate.mock.calls.length)).toHaveLength(1)
+    expect(photoLayers()).toHaveLength(1)
     expect(contexts[0].textRuns.some((run) => run.text === 'Current single')).toBe(true)
   })
 })

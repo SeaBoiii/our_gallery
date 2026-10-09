@@ -25,11 +25,11 @@ export const mockGallery: GalleryMedia[] = [
   memory('memory-1', 0, 'photo', 'Aisyah', 'A quiet moment before the ceremony.', 'portrait'),
   memory('memory-2', 0, 'photo', 'Faris & Hana', 'The details were beautiful.', 'landscape'),
   memory('memory-3', 1, 'photo', null, 'To a lifetime of new adventures.', 'portrait'),
-  memory('memory-4', 1, 'video', 'Uncle Rahman', 'The room when you both arrived!', 'landscape'),
+  memory('memory-4', 1, 'photo', 'Uncle Rahman', 'The room when you both arrived!', 'landscape'),
   memory('memory-5', 1, 'photo', 'Mei Lin', null, 'landscape'),
   memory('memory-6', 0, 'photo', 'Sara', 'Every little detail felt like you.', 'portrait'),
   memory('memory-7', 1, 'photo', 'The cousins', 'From SIN to forever.', 'landscape'),
-  memory('memory-8', 1, 'video', null, null, 'portrait'),
+  memory('memory-8', 1, 'photo', null, null, 'portrait'),
 ]
 
 export const mockAdminStats: AdminStats = {
